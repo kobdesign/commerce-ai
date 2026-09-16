@@ -2,9 +2,11 @@
 
 ชื่อชั่วคราวสำหรับโครงการช่วยร้านค้าออนไลน์ตรวจเงินรับและกำไร มี AI ในกระบวนการทำงาน รองรับหลายองค์กร และมีเส้นทางขยายสู่ Enterprise
 
-สถานะ: **Product workflow v0.5 — เว็บแอปและ PostgreSQL สำหรับทดลองในเครื่อง**
+สถานะ: **Product workflow v0.6 — เว็บแอปและ PostgreSQL สำหรับทดลองในเครื่อง**
 
-มี login, หลายบริษัท/ร้าน, catalog หลายประเภทสินค้า, รายละเอียดที่เพิ่มเองได้, หลาย SKU ต่อสินค้า, แก้ไขรายละเอียด/ราคา/ต้นทุนพร้อมประวัติ, สิทธิ์รายบทบาท/ร้าน, audit, AI tool preview, flow ตรวจ/ยืนยันรายการขาย และ Review Inbox สำหรับยืนยันต้นทุนที่ขาดแบบมีประวัติแล้ว ข้อมูลเริ่มต้นเป็นข้อมูลสมมติ ยังไม่ใช่กำไรสุทธิหรือระบบ production/Enterprise ที่ตรวจรับแล้ว
+มี login, หลายบริษัท/ร้าน, catalog หลายประเภทสินค้า, รายละเอียดที่เพิ่มเองได้, หลาย SKU ต่อสินค้า, แก้ไขรายละเอียด/ราคา/ต้นทุนพร้อมประวัติ, สิทธิ์รายบทบาท/ร้าน, audit, AI tool preview, flow ตรวจ/ยืนยันรายการขาย, source line identity ป้องกันยอดซ้ำข้ามไฟล์ และ Review Inbox สำหรับยืนยันต้นทุนที่ขาดแบบมีประวัติแล้ว ข้อมูลเริ่มต้นเป็นข้อมูลสมมติ ยังไม่ใช่กำไรสุทธิหรือระบบ production/Enterprise ที่ตรวจรับแล้ว
+
+การป้องกันรายการขายซ้ำข้ามไฟล์: [Product workflow v0.6](docs/18-source-line-deduplication.md)
 
 รายการที่ต้องตรวจและต้นทุนย้อนหลัง: [Product workflow v0.5](docs/16-missing-cost-review-inbox.md)
 
@@ -33,7 +35,7 @@ npm run dev
 
 คู่มือคำสั่ง บัญชีทดสอบ ขอบเขตฟีเจอร์และข้อจำกัด: [Foundation runbook](docs/10-foundation-runbook.md)
 
-ผลตรวจล่าสุด: **45 integration tests และ 14 browser tests ผ่าน** ดู [ผลตรวจ v0.5](docs/16-missing-cost-review-inbox.md), [Business Logic verification](docs/15-business-logic-verification.md) หรือ [ผลตรวจ v0.4](docs/14-confirmed-orders-and-contribution.md)
+ผลตรวจล่าสุด: **47 integration tests และ 15 browser tests ผ่าน** ดู [ผลตรวจ v0.6](docs/18-source-line-deduplication.md), [ผลตรวจ v0.5](docs/16-missing-cost-review-inbox.md) หรือ [Business Logic verification](docs/15-business-logic-verification.md)
 
 เอกสารอ้างอิงบทสนทนาของผู้ใช้ ข้อมูลร้านจริงและเทคโนโลยีที่ทีมถนัดยังรอยืนยัน ตัวอย่างทั้งหมดที่ติดป้าย synthetic ไม่ใช่ข้อมูลร้านหรือรูปแบบไฟล์ทางการของแพลตฟอร์ม
 
@@ -64,6 +66,6 @@ Product model เป็นกลางต่อหมวดสินค้า �
 - ทำ discovery จากงานจริงและรายงานที่ตัดข้อมูลส่วนบุคคลไม่จำเป็นออก
 - ยืนยันสูตรและความหมายของข้อมูลกับผู้ดูแลการเงิน
 - ใช้ TypeScript / Next.js / PostgreSQL เป็นฐานที่ติดตั้งแล้ว และยืนยันข้อจำกัดการให้บริการก่อน production
-- ตรวจ schema รายงาน TikTok จริงและเพิ่ม source line IDs → refunds/settlement → ค่าโฆษณาและค่าใช้จ่ายที่ยืนยันแล้ว โดยคงชุดทดสอบ Tenant A/B
+- ตรวจ schema รายงาน TikTok จริงและยืนยัน source line ID ที่เพิ่มแล้ว → refunds/settlement → ค่าโฆษณาและค่าใช้จ่ายที่ยืนยันแล้ว โดยคงชุดทดสอบ Tenant A/B
 
 ไม่มีกำหนดส่งที่ยืนยันแล้ว รอบพัฒนาเป็นลำดับงาน ไม่ใช่คำสัญญาระยะเวลา

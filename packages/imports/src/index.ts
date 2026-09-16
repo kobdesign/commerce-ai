@@ -7,13 +7,13 @@ import { assertShop,audit } from '@commerce/domain';
 
 export const fields=['orderId','sku','quantity','date','netSales'] as const;
 export type Field=typeof fields[number];
-export type Mapping=Record<Field,string>&{platformFee?:string};
-const mappingSchema=z.object({orderId:z.string().min(1),sku:z.string().min(1),quantity:z.string().min(1),date:z.string().min(1),netSales:z.string().min(1),platformFee:z.string().default('')}).strict();
+export type Mapping=Record<Field,string>&{sourceLineId?:string;platformFee?:string};
+const mappingSchema=z.object({orderId:z.string().min(1),sourceLineId:z.string().default(''),sku:z.string().min(1),quantity:z.string().min(1),date:z.string().min(1),netSales:z.string().min(1),platformFee:z.string().default('')}).strict();
 const fileInput=z.object({shopId:uuid,filename:z.string().trim().min(1).max(150),csv:z.string().min(1).max(1_048_576),delimiter:z.enum([',',';','\t'])}).strict();
 const mappedInput=fileInput.extend({mapping:mappingSchema});
 export type SourceFile=z.infer<typeof fileInput>;
 export type ImportInput=z.infer<typeof mappedInput>;
-export type PreviewRow={record:number;orderId:string;sku:string;date:string;quantity:number|null;netSalesMinor:number|null;platformFeeMinor:number|null;errors:string[];warnings:string[]};
+export type PreviewRow={record:number;sourceLineId:string|null;orderId:string;sku:string;date:string;quantity:number|null;netSalesMinor:number|null;platformFeeMinor:number|null;errors:string[];warnings:string[]};
 export type Preview={rows:PreviewRow[];total:number;valid:number;invalid:number;warnings:number;sourceHash:string;mapping:Mapping;filename:string};
 function reject(message:string):never{throw new AppError(400,'INVALID_CSV',message);}
 function readCsv(d:SourceFile){
@@ -43,17 +43,29 @@ function validDate(value:string){return /^\d{4}-\d{2}-\d{2}$/.test(value)&&Numbe
 async function analyze(tx:Tx,ctx:Context,d:ImportInput):Promise<Preview>{
   await assertShop(tx,ctx,d.shopId);
   const {headers,records}=readCsv(d);
-  const selected=[...fields.map(f=>d.mapping[f]),...(d.mapping.platformFee?[d.mapping.platformFee]:[])];
-  if(new Set(selected).size!==selected.length||fields.some(f=>!headers.includes(d.mapping[f]))||(d.mapping.platformFee&&!headers.includes(d.mapping.platformFee)))reject('เลือกคอลัมน์ให้ครบ โดยแต่ละข้อมูลใช้คนละคอลัมน์');
+  const selected=[...fields.map(f=>d.mapping[f]),...(d.mapping.sourceLineId?[d.mapping.sourceLineId]:[]),...(d.mapping.platformFee?[d.mapping.platformFee]:[])];
+  if(new Set(selected).size!==selected.length||fields.some(f=>!headers.includes(d.mapping[f]))||(d.mapping.sourceLineId&&!headers.includes(d.mapping.sourceLineId))||(d.mapping.platformFee&&!headers.includes(d.mapping.platformFee)))reject('เลือกคอลัมน์ให้ครบ โดยแต่ละข้อมูลใช้คนละคอลัมน์');
   const positions=Object.fromEntries(fields.map(f=>[f,headers.indexOf(d.mapping[f])])) as Record<Field,number>;
+  const sourceLinePosition=d.mapping.sourceLineId?headers.indexOf(d.mapping.sourceLineId):-1;
   const feePosition=d.mapping.platformFee?headers.indexOf(d.mapping.platformFee):-1;
-  const source=records.map(values=>({...Object.fromEntries(fields.map(f=>[f,values[positions[f]].trim()])),platformFee:feePosition>=0?values[feePosition].trim():''}) as Mapping);
+  type SourceRow=Record<Field,string>&{sourceLineId:string;platformFee:string};
+  const source=records.map(values=>({...Object.fromEntries(fields.map(f=>[f,values[positions[f]].trim()])),sourceLineId:sourceLinePosition>=0?values[sourceLinePosition].trim():'',platformFee:feePosition>=0?values[feePosition].trim():''}) as SourceRow);
   const known=await tx.query<{sku:string;has_cost:boolean}>(`SELECT v.sku,(SELECT c.amount_minor FROM app.cost_versions c WHERE c.tenant_id=v.tenant_id AND c.variant_id=v.id AND c.effective_at<=clock_timestamp() ORDER BY c.effective_at DESC,c.created_at DESC LIMIT 1) IS NOT NULL AS has_cost
     FROM app.variants v JOIN app.shop_products s ON s.tenant_id=v.tenant_id AND s.product_id=v.product_id
     WHERE s.shop_id=$1 AND v.sku=ANY($2::text[])`,[d.shopId,[...new Set(source.map(r=>r.sku))]]);
-  const bySku=new Map(known.map(k=>[k.sku,k]));const seen=new Set<string>();
+  const committed=d.mapping.sourceLineId&&source.some(r=>r.sourceLineId)
+    ?await tx.query<{source_line_id:string}>('SELECT source_line_id FROM app.sales_lines WHERE shop_id=$1 AND source_line_id=ANY($2::text[])',[d.shopId,[...new Set(source.map(r=>r.sourceLineId).filter(Boolean))]])
+    :[];
+  const committedIds=new Set(committed.map(r=>r.source_line_id));
+  const bySku=new Map(known.map(k=>[k.sku,k]));const seen=new Set<string>(),seenSourceIds=new Set<string>();
   const rows=source.map((r,i):PreviewRow=>{
     const errors:string[]=[],warnings:string[]=[];
+    if(d.mapping.sourceLineId){
+      if(!r.sourceLineId||r.sourceLineId.length>150)errors.push('รหัสรายการต้นทางว่างหรือยาวเกิน 150 ตัวอักษร');
+      else if(seenSourceIds.has(r.sourceLineId))errors.push('รหัสรายการต้นทางซ้ำในไฟล์นี้');
+      else if(committedIds.has(r.sourceLineId))errors.push('รายการต้นทางนี้ถูกนำเข้าในร้านนี้แล้ว');
+      seenSourceIds.add(r.sourceLineId);
+    }
     if(!r.orderId||r.orderId.length>100)errors.push('เลขคำสั่งซื้อว่างหรือยาวเกิน 100 ตัวอักษร');
     if(!bySku.has(r.sku))errors.push('ไม่พบ SKU นี้ในร้านที่เลือก');
     else if(!bySku.get(r.sku)?.has_cost)warnings.push('ยังไม่มีต้นทุนสินค้า');
@@ -63,7 +75,7 @@ async function analyze(tx:Tx,ctx:Context,d:ImportInput):Promise<Preview>{
     const netSalesMinor=amount(r.netSales);if(netSalesMinor===null)errors.push('เงินรับสุทธิต้องไม่ติดลบและมีทศนิยมไม่เกิน 2 ตำแหน่ง');
     const platformFeeMinor=r.platformFee?amount(r.platformFee):null;if(r.platformFee&&platformFeeMinor===null)errors.push('ค่าธรรมเนียมต้องเป็นจำนวนบวกและมีทศนิยมไม่เกิน 2 ตำแหน่ง');
     const key=JSON.stringify([...fields.map(f=>r[f]),r.platformFee]);if(seen.has(key))warnings.push('ข้อมูลเหมือนรายการก่อนหน้า กรุณาตรวจว่าซ้ำหรือไม่');seen.add(key);
-    return {record:i+1,orderId:r.orderId.slice(0,100),sku:r.sku.slice(0,100),date:r.date.slice(0,30),quantity:Number.isSafeInteger(quantity)?quantity:null,netSalesMinor,platformFeeMinor,errors,warnings};
+    return {record:i+1,sourceLineId:r.sourceLineId?r.sourceLineId.slice(0,150):null,orderId:r.orderId.slice(0,100),sku:r.sku.slice(0,100),date:r.date.slice(0,30),quantity:Number.isSafeInteger(quantity)?quantity:null,netSalesMinor,platformFeeMinor,errors,warnings};
   });
   return {rows,total:rows.length,valid:rows.filter(r=>!r.errors.length).length,invalid:rows.filter(r=>r.errors.length).length,warnings:rows.filter(r=>r.warnings.length).length,sourceHash:createHash('sha256').update(d.csv).digest('hex'),mapping:d.mapping,filename:d.filename};
 }
@@ -72,8 +84,8 @@ export async function saveDraft(ctx:Context,input:unknown){
   const d=mappedInput.parse(input);
   return withTenant(ctx,async(tx,role)=>{
     access(role);const preview=await analyze(tx,ctx,d);
-    const parserVersion='orders-preview-v2';
-    const fingerprint=createHash('sha256').update(JSON.stringify([preview.sourceHash,d.delimiter,[...fields.map(f=>d.mapping[f]),d.mapping.platformFee],parserVersion])).digest('hex');
+    const parserVersion='orders-preview-v3';
+    const fingerprint=createHash('sha256').update(JSON.stringify([preview.sourceHash,d.delimiter,[...fields.map(f=>d.mapping[f]),d.mapping.sourceLineId,d.mapping.platformFee],parserVersion])).digest('hex');
     const rows=await tx.query<{id:string}>(`INSERT INTO app.import_drafts(tenant_id,id,shop_id,actor_id,filename,source_hash,fingerprint,mapping,preview,parser_version)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(tenant_id,shop_id,fingerprint) DO NOTHING RETURNING id`,[ctx.tenantId,randomUUID(),d.shopId,ctx.userId,d.filename,preview.sourceHash,fingerprint,JSON.stringify(d.mapping),JSON.stringify(preview),parserVersion]);
     if(!rows.length){const [existing]=await tx.query<{id:string}>('SELECT id FROM app.import_drafts WHERE shop_id=$1 AND fingerprint=$2',[d.shopId,fingerprint]);return {id:existing.id,duplicate:true};}
@@ -97,7 +109,7 @@ export async function getDraft(ctx:Context,shopId:string,id:string){uuid.parse(i
 });}
 
 const storedRowSchema=z.object({
-  record:z.number().int().positive(),orderId:z.string().min(1).max(100),sku:z.string().min(1).max(100),
+  record:z.number().int().positive(),sourceLineId:z.string().min(1).max(150).nullable().default(null),orderId:z.string().min(1).max(100),sku:z.string().min(1).max(100),
   date:z.string().max(30),quantity:z.number().int().nullable(),
   netSalesMinor:z.number().int().nullable(),platformFeeMinor:z.number().int().nullable().default(null),
   errors:z.array(z.string()),warnings:z.array(z.string()),
@@ -105,10 +117,12 @@ const storedRowSchema=z.object({
 const commitRowSchema=storedRowSchema.extend({date:z.string().refine(validDate),quantity:z.number().int().min(1).max(1_000_000),netSalesMinor:z.number().int().min(0).max(1_000_000_000),platformFeeMinor:z.number().int().min(0).max(1_000_000_000).nullable()});
 const storedPreviewSchema=z.object({rows:z.array(storedRowSchema).min(1).max(1000),total:z.number().int().positive(),valid:z.number().int().nonnegative(),invalid:z.number().int().nonnegative(),warnings:z.number().int().nonnegative(),sourceHash:z.string().length(64),filename:z.string().min(1).max(150)}).passthrough();
 const commitInput=z.object({shopId:uuid,draftId:uuid}).strict();
+const duplicateSourceMessage='พบรายการต้นทางที่เคยนำเข้าแล้ว กรุณาสร้างร่างใหม่และนำรายการซ้ำออก';
+function isSourceIdentityConflict(error:unknown){const e=error as {code?:string;constraint?:string}|null;return e?.code==='23505'&&e.constraint==='sales_lines_source_identity_idx';}
 
 export async function commitDraft(ctx:Context,input:unknown){
   const d=commitInput.parse(input);
-  return withTenant(ctx,async(tx,role)=>{
+  try{return await withTenant(ctx,async(tx,role)=>{
     access(role);await assertShop(tx,ctx,d.shopId);
     const [draft]=await tx.query<{id:string;filename:string;source_hash:string;parser_version:string;preview:unknown}>(`SELECT id,filename,source_hash,parser_version,preview FROM app.import_drafts WHERE id=$1 AND shop_id=$2`,[d.draftId,d.shopId]);
     if(!draft)throw new AppError(404,'NOT_FOUND','ไม่พบร่างในร้านนี้');
@@ -117,6 +131,11 @@ export async function commitDraft(ctx:Context,input:unknown){
     if(preview.invalid||preview.valid!==preview.total||preview.rows.some(r=>r.errors.length))throw new AppError(409,'IMPORT_HAS_ERRORS','แก้รายการที่ไม่ผ่านการตรวจก่อนยืนยันนำเข้า');
     if(preview.rows.some(r=>r.warnings.includes('ข้อมูลเหมือนรายการก่อนหน้า กรุณาตรวจว่าซ้ำหรือไม่')))throw new AppError(409,'DUPLICATE_ROWS','ไฟล์มีแถวเหมือนกัน กรุณาตรวจและนำแถวซ้ำออกก่อนยืนยัน');
     const canonicalRows=z.array(commitRowSchema).parse(preview.rows);
+    const sourceIds=canonicalRows.map(r=>r.sourceLineId).filter((id):id is string=>id!==null);
+    if(sourceIds.length){
+      const existing=await tx.query<{source_line_id:string}>('SELECT source_line_id FROM app.sales_lines WHERE shop_id=$1 AND source_line_id=ANY($2::text[]) LIMIT 1',[d.shopId,sourceIds]);
+      if(existing.length)throw new AppError(409,'DUPLICATE_SOURCE_LINE',duplicateSourceMessage);
+    }
     const batchId=randomUUID();
     const inserted=await tx.query<{id:string}>(`INSERT INTO app.import_batches(tenant_id,id,shop_id,draft_id,actor_id,filename,source_hash,parser_version)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(tenant_id,draft_id) DO NOTHING RETURNING id`,[ctx.tenantId,batchId,d.shopId,d.draftId,ctx.userId,draft.filename,draft.source_hash,draft.parser_version]);
@@ -144,14 +163,14 @@ export async function commitDraft(ctx:Context,input:unknown){
       const cogs=matched.cost_minor===null?null:matched.cost_minor*row.quantity;
       const contribution=cogs===null?null:row.netSalesMinor-cogs;
       const lineId=randomUUID();
-      await tx.query(`INSERT INTO app.sales_lines(tenant_id,id,batch_id,shop_id,source_record,order_id,variant_id,sold_on,quantity,net_receipt_minor,platform_fee_minor,unit_cost_minor,cogs_minor,contribution_minor)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,[ctx.tenantId,lineId,batchId,d.shopId,row.record,row.orderId,matched.variant_id,row.date,row.quantity,row.netSalesMinor,row.platformFeeMinor,matched.cost_minor,cogs,contribution]);
+      await tx.query(`INSERT INTO app.sales_lines(tenant_id,id,batch_id,shop_id,source_record,source_line_id,order_id,variant_id,sold_on,quantity,net_receipt_minor,platform_fee_minor,unit_cost_minor,cogs_minor,contribution_minor)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,[ctx.tenantId,lineId,batchId,d.shopId,row.record,row.sourceLineId,row.orderId,matched.variant_id,row.date,row.quantity,row.netSalesMinor,row.platformFeeMinor,matched.cost_minor,cogs,contribution]);
       await tx.query(`INSERT INTO app.sales_line_calculations(tenant_id,id,sales_line_id,version,unit_cost_minor,basis,actor_id)
         VALUES($1,$2,$3,1,$4,'import',$5)`,[ctx.tenantId,randomUUID(),lineId,matched.cost_minor,ctx.userId]);
     }
     await audit(tx,ctx,'import.batch.committed',batchId,{shopId:d.shopId,draftId:d.draftId,lines:preview.total,missingCostLines:lookup.filter(r=>r.cost_minor===null).length,calculationVersion:'net-receipt-minus-cogs-v1'});
     return {id:batchId,duplicate:false,lines:preview.total};
-  });
+  });}catch(error){if(isSourceIdentityConflict(error))throw new AppError(409,'DUPLICATE_SOURCE_LINE',duplicateSourceMessage);throw error;}
 }
 
 type SummaryTotal={lineCount:number;orderCount:number;netReceiptMinor:number;platformFeeMinor:number;feeLineCount:number;missingCostLines:number;manualCostLines:number;cogsMinor:number|null;contributionMinor:number|null};

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll,describe,expect,it } from 'vitest';
 import { closePools,resolveContext,withTenant } from '@commerce/db';
 import { createProductFamily,demo,getProductForEdit,updateProduct } from '@commerce/domain';
-import { commitDraft,financialSummary,resolveMissingCost,reviewItems,saveDraft } from '@commerce/imports';
+import { commitDraft,financialSummary,previewImport,resolveMissingCost,reviewItems,saveDraft } from '@commerce/imports';
 
 afterAll(closePools);
 const today=new Date().toISOString().slice(0,10);
@@ -14,6 +14,9 @@ async function fixture(costMinor:number|null=18000){
 }
 function source(sku:string,rows=`ORDER-${randomUUID()},${sku},1,${today},319.00,80.00`){
   return {shopId:demo.shops.tiktok,filename:`financial-${randomUUID()}.csv`,delimiter:',' as const,csv:`order_id,sku,quantity,date,net_receipt,platform_fee\n${rows}\n`,mapping};
+}
+function identifiedSource(sku:string,sourceLineId:string,orderId=`IDENTIFIED-${randomUUID()}`){
+  return {shopId:demo.shops.tiktok,filename:`identified-${randomUUID()}.csv`,delimiter:',' as const,csv:`order_id,source_line_id,sku,quantity,date,net_receipt,platform_fee\n${orderId},${sourceLineId},${sku},1,${today},319.00,80.00\n`,mapping:{...mapping,sourceLineId:'source_line_id'}};
 }
 
 describe('Committed order lines and deterministic contribution',()=>{
@@ -66,6 +69,34 @@ describe('Committed order lines and deterministic contribution',()=>{
     const same=`SAME-${randomUUID()},${sku},1,${today},319.00,80.00`,duplicate=source(sku,`${same}\n${same}`),draft=await saveDraft(ctx,duplicate);
     await expect(commitDraft(ctx,{shopId:duplicate.shopId,draftId:draft.id})).rejects.toMatchObject({code:'DUPLICATE_ROWS'});
     expect(await withTenant(ctx,tx=>tx.query('SELECT id FROM app.import_batches WHERE draft_id=ANY($1::uuid[])',[[invalid.id,draft.id]]))).toEqual([]);
+  });
+
+  it('stores a stable source line ID and flags it before a later file can be committed',async()=>{
+    const {ctx,sku}=await fixture(),sourceLineId=`SOURCE-${randomUUID()}`;
+    const first=identifiedSource(sku,sourceLineId),firstDraft=await saveDraft(ctx,first),batch=await commitDraft(ctx,{shopId:first.shopId,draftId:firstDraft.id});
+    const [stored]=await withTenant(ctx,tx=>tx.query<{source_line_id:string}>('SELECT source_line_id FROM app.sales_lines WHERE batch_id=$1',[batch.id]));
+    expect(stored.source_line_id).toBe(sourceLineId);
+
+    const repeated=identifiedSource(sku,sourceLineId),preview=await previewImport(ctx,repeated);
+    expect(preview).toMatchObject({invalid:1,valid:0});
+    expect(preview.rows[0].errors).toContain('รายการต้นทางนี้ถูกนำเข้าในร้านนี้แล้ว');
+    const repeatedDraft=await saveDraft(ctx,repeated);
+    await expect(commitDraft(ctx,{shopId:repeated.shopId,draftId:repeatedDraft.id})).rejects.toMatchObject({code:'IMPORT_HAS_ERRORS'});
+  });
+
+  it('serializes two different files that concurrently claim the same source line ID',async()=>{
+    const {ctx,sku}=await fixture(),sourceLineId=`RACE-SOURCE-${randomUUID()}`;
+    const first=identifiedSource(sku,sourceLineId,`RACE-A-${randomUUID()}`),second=identifiedSource(sku,sourceLineId,`RACE-B-${randomUUID()}`);
+    const firstDraft=await saveDraft(ctx,first),secondDraft=await saveDraft(ctx,second);
+    const results=await Promise.allSettled([
+      commitDraft(ctx,{shopId:first.shopId,draftId:firstDraft.id}),
+      commitDraft(ctx,{shopId:second.shopId,draftId:secondDraft.id}),
+    ]);
+    expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
+    expect(results.filter(r=>r.status==='rejected')).toHaveLength(1);
+    expect((results.find(r=>r.status==='rejected') as PromiseRejectedResult).reason).toMatchObject({code:'DUPLICATE_SOURCE_LINE'});
+    const [{total}]=await withTenant(ctx,tx=>tx.query<{total:number}>('SELECT count(*)::int AS total FROM app.sales_lines WHERE shop_id=$1 AND source_line_id=$2',[first.shopId,sourceLineId]));
+    expect(total).toBe(1);
   });
 
   it('enforces tenant, role and append-only boundaries at the database layer',async()=>{
