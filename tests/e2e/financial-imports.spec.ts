@@ -25,6 +25,22 @@ test('confirms a reviewed CSV once and traces contribution back to its source dr
   await orderRow.getByRole('link',{name:'เปิดร่างต้นทาง',exact:true}).click();await expect(page.getByRole('status')).toContainText('นำเข้าร่างนี้แล้ว');await expect(page.getByRole('button',{name:'ยืนยันนำเข้าข้อมูล',exact:true})).toHaveCount(0);
 });
 
+test('maps a source line ID and blocks the same marketplace line in a later file',async({page})=>{
+  await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
+  const stamp=Date.now(),sourceLineId=`SOURCE-E2E-${stamp}`;
+  const csv=(order:string)=>`order_id,source_line_id,sku,quantity,date,net_receipt,platform_fee\n${order},${sourceLineId},CH-L-BK-32,1,2026-09-16,319.00,80.00\n`;
+  await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:`source-first-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(csv(`SOURCE-ORDER-A-${stamp}`))});
+  await expect(page.getByLabel('คอลัมน์ รหัสรายการต้นทาง · แนะนำ',{exact:true})).toHaveValue('source_line_id');
+  await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();await expect(page.getByText(`ต้นทาง ${sourceLineId}`,{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'บันทึกร่างเพื่อตรวจ',exact:true}).click();await page.getByRole('checkbox',{name:/ฉันตรวจแล้ว/}).check();await page.getByRole('button',{name:'ยืนยันนำเข้าข้อมูล',exact:true}).click();await expect(page.getByRole('status')).toContainText('นำเข้า 1 รายการแล้ว');
+
+  await page.getByRole('button',{name:'เลือกไฟล์ใหม่',exact:true}).click();
+  await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:`source-second-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(csv(`SOURCE-ORDER-B-${stamp}`))});
+  await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();
+  await expect(page.getByText('รายการต้นทางนี้ถูกนำเข้าในร้านนี้แล้ว',{exact:true})).toBeVisible();
+  await expect(page.locator('.import-summary>div').filter({hasText:'ต้องแก้ไข'}).locator('strong')).toContainText('1');
+});
+
 test('confirms a missing cost from the review inbox without changing the imported line',async({page})=>{
   await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
   const stamp=Date.now(),order=`REVIEW-E2E-${stamp}`,filename=`review-${stamp}.csv`;

@@ -22,3 +22,5 @@
 /* Import focus: keep saved drafts available without competing with the active task. */
 .import-history-summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:44px}.import-history-summary::-webkit-details-marker{display:none}.import-history-summary>span:first-child{display:flex;align-items:baseline;gap:10px}.import-history-summary strong{font-size:17px}.import-history-summary small,.history-toggle-label{color:var(--muted);font-size:12px;font-weight:400}.history-toggle-label{display:flex;align-items:center;gap:7px;white-space:nowrap}.import-history[open] .history-toggle-label svg{transform:rotate(180deg)}.import-history-content{margin-top:18px}
 @media(max-width:680px){.mobile-signout .icon-button{min-width:44px;min-height:44px}.nav-links a{min-height:44px}.select-wrap select{min-height:44px}.import-history-summary>span:first-child{align-items:flex-start;flex-direction:column;gap:0}.import-history-summary strong{font-size:16px}.history-toggle-label{min-height:44px}}
+
+.mapping-row select{min-height:44px}
