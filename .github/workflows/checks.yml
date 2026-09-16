@@ -1,0 +1,58 @@
+name: Foundation checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_PASSWORD: ci-only-postgres
+          POSTGRES_DB: commerce_ai
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_MODE: local-demo
+      APP_ORIGIN: http://127.0.0.1:3001
+      AI_ENABLED: 'false'
+      DATABASE_URL: postgresql://commerce_app:ci-only-app@127.0.0.1:5432/commerce_ai
+      IDENTITY_DATABASE_URL: postgresql://commerce_identity:ci-only-identity@127.0.0.1:5432/commerce_ai
+      QUEUE_DATABASE_URL: postgresql://commerce_queue:ci-only-queue@127.0.0.1:5432/commerce_ai
+      ADMIN_DATABASE_URL: postgresql://postgres:ci-only-postgres@127.0.0.1:5432/commerce_ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run db:migrate
+      - run: npm run db:seed
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Verify production app and worker
+        run: |
+          npm run start > /tmp/commerce-web.log 2>&1 &
+          npm run worker > /tmp/commerce-worker.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl --fail --silent "$APP_ORIGIN/login" > /dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:e2e
+          node --import tsx scripts/check-worker.ts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failure-evidence
+          path: |
+            playwright-report/
+            test-results/

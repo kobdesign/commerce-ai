@@ -1,0 +1,19 @@
+name: commerce-ai-local
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run npm run env:init}
+      POSTGRES_DB: commerce_ai
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - commerce_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d commerce_ai"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+volumes:
+  commerce_data:

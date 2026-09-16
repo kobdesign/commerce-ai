@@ -1,0 +1,4 @@
+order_id,sku,quantity,date,net_receipt,platform_fee
+DEMO-001,CH-L-BK-32,1,2026-09-16,539.00,60.00
+DEMO-002,CH-L-KH-30,1,2026-09-16,539.00,60.00
+DEMO-003,CH-L-NV-34,2,2026-09-16,1078.00,120.00
