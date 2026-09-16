@@ -36,3 +36,7 @@
 
 .catalog-search-status{margin:0;white-space:nowrap}.catalog-search-error{margin:0 18px 18px}
 @media(max-width:680px){.catalog-search-status{width:100%}.catalog-search-error{margin:0 13px 13px}}
+
+/* Append-only corrections: show the immutable source before accepting a reversal. */
+.reversal-entry{margin:0 0 24px;border-left:3px solid #8a7449}.reversal-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.reversal-heading h2{margin:2px 0 5px}.reversal-heading p{color:var(--muted);margin:0}.eyebrow{display:block;color:#78643e;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}.reversal-source{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:20px 0;padding:16px;background:#faf9f6;border:1px solid #e4dfd4;border-radius:4px}.reversal-source dt{font-size:12px;color:var(--muted)}.reversal-source dd{margin:3px 0 0;font-weight:500;overflow-wrap:anywhere}.reversal-entry input,.reversal-entry .button{min-height:44px}.adjustment-status small{white-space:nowrap}.reversal-action{white-space:nowrap}
+@media(max-width:680px){.reversal-source{grid-template-columns:1fr;gap:10px}.reversal-entry .form-actions{display:grid;grid-template-columns:1fr}.reversal-entry .form-actions .button{width:100%}}

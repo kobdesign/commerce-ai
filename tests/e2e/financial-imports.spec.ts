@@ -43,9 +43,9 @@ test('maps a source line ID and blocks the same marketplace line in a later file
   await expect(page.locator('.import-summary>div').filter({hasText:'ต้องแก้ไข'}).locator('strong')).toContainText('1');
 });
 
-test('records a partial refund and traces its matched effect without rewriting the sale',async({page})=>{
+test('records and reverses a partial refund without rewriting the sale',async({page})=>{
   await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
-  const stamp=Date.now(),order=`REFUND-E2E-${stamp}`,sourceEventId=`REFUND-EVENT-${stamp}`;
+  const stamp=Date.now(),order=`REFUND-E2E-${stamp}`,sourceEventId=`REFUND-EVENT-${stamp}`,reversalId=`REFUND-REVERSAL-${stamp}`;
   const csv=`order_id,source_line_id,sku,quantity,date,net_receipt,platform_fee\n${order},REFUND-LINE-${stamp},CH-L-BK-32,1,2026-09-16,319.00,80.00\n`;
   await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:`refund-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(csv)});
   await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();await page.getByRole('button',{name:'บันทึกร่างเพื่อตรวจ',exact:true}).click();
@@ -57,6 +57,11 @@ test('records a partial refund and traces its matched effect without rewriting t
   const eventRow=page.getByRole('row').filter({hasText:sourceEventId});await expect(eventRow).toContainText('-฿100.00');await expect(eventRow).toContainText('จับคู่ 1 รายการ');
   await page.getByRole('link',{name:/ดูผลต่อเงินรับ/}).click();const orderRow=page.getByRole('row').filter({hasText:order});
   await expect(orderRow).toContainText('฿319.00');await expect(orderRow).toContainText('-฿100.00');await expect(orderRow).toContainText('฿219.00');await expect(orderRow).toContainText('-฿31.00');
+  await page.getByRole('navigation').getByRole('link',{name:'คืนเงินและปรับยอด',exact:true}).click();const originalRow=page.getByRole('row').filter({hasText:sourceEventId});await originalRow.getByRole('button',{name:'แก้กลับ',exact:true}).click();
+  await page.getByLabel('รหัสรายการแก้กลับ',{exact:true}).fill(reversalId);await page.getByLabel('เหตุผลที่แก้กลับ',{exact:true}).fill('ทดสอบแก้กลับรายการที่บันทึกซ้ำ');await page.getByRole('checkbox',{name:/ยกเลิกผลของรายการนี้/}).check();
+  await page.getByRole('button',{name:'ยืนยันการแก้กลับ',exact:true}).click();await expect(page.getByRole('status')).toContainText(`แก้กลับรายการ ${sourceEventId} แล้ว`);
+  const reversalRow=page.getByRole('row').filter({hasText:reversalId});await expect(reversalRow).toContainText('+฿100.00');await expect(reversalRow).toContainText('รายการแก้กลับ');await expect(originalRow).toContainText('ถูกแก้กลับแล้ว');
+  await page.getByRole('link',{name:/ดูผลต่อเงินรับ/}).click();const restoredRow=page.getByRole('row').filter({hasText:order}),cells=restoredRow.getByRole('cell');await expect(cells.nth(5)).toContainText('+฿0.00');await expect(cells.nth(6)).toHaveText('฿319.00');await expect(cells.nth(8)).toHaveText('฿69.00');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.screenshot({path:'artifacts/financial-refund-390.png',fullPage:true});
 });
