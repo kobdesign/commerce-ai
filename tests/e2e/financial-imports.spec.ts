@@ -43,6 +43,24 @@ test('maps a source line ID and blocks the same marketplace line in a later file
   await expect(page.locator('.import-summary>div').filter({hasText:'ต้องแก้ไข'}).locator('strong')).toContainText('1');
 });
 
+test('records a partial refund and traces its matched effect without rewriting the sale',async({page})=>{
+  await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
+  const stamp=Date.now(),order=`REFUND-E2E-${stamp}`,sourceEventId=`REFUND-EVENT-${stamp}`;
+  const csv=`order_id,source_line_id,sku,quantity,date,net_receipt,platform_fee\n${order},REFUND-LINE-${stamp},CH-L-BK-32,1,2026-09-16,319.00,80.00\n`;
+  await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:`refund-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(csv)});
+  await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();await page.getByRole('button',{name:'บันทึกร่างเพื่อตรวจ',exact:true}).click();
+  await page.getByRole('checkbox',{name:/ฉันตรวจแล้ว/}).check();await page.getByRole('button',{name:'ยืนยันนำเข้าข้อมูล',exact:true}).click();await expect(page.getByRole('status')).toContainText('นำเข้า 1 รายการแล้ว');
+  await page.getByRole('link',{name:'คืนเงินและปรับยอด',exact:true}).click();await expect(page.getByRole('heading',{name:'คืนเงินและปรับยอด',exact:true})).toBeVisible();
+  await page.getByLabel('รหัสรายการต้นทาง',{exact:true}).fill(sourceEventId);await page.getByLabel('เลขคำสั่งซื้อ',{exact:true}).fill(order);await page.getByLabel('จำนวนเงิน (บาท)',{exact:true}).fill('100.00');
+  await page.getByLabel('เหตุผลหรือหลักฐาน',{exact:true}).fill('คืนเงินบางส่วน ลูกค้ายังเก็บสินค้า');await page.getByRole('checkbox',{name:/ยอดนี้ยังไม่รวมอยู่ในเงินรับสุทธิ/}).check();
+  await page.getByRole('button',{name:'บันทึกรายการปรับยอด',exact:true}).click();await expect(page.getByRole('status')).toContainText(`จับคู่กับคำสั่งซื้อ ${order} จำนวน 1 รายการ`);
+  const eventRow=page.getByRole('row').filter({hasText:sourceEventId});await expect(eventRow).toContainText('-฿100.00');await expect(eventRow).toContainText('จับคู่ 1 รายการ');
+  await page.getByRole('link',{name:/ดูผลต่อเงินรับ/}).click();const orderRow=page.getByRole('row').filter({hasText:order});
+  await expect(orderRow).toContainText('฿319.00');await expect(orderRow).toContainText('-฿100.00');await expect(orderRow).toContainText('฿219.00');await expect(orderRow).toContainText('-฿31.00');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.screenshot({path:'artifacts/financial-refund-390.png',fullPage:true});
+});
+
 test('confirms a missing cost from the review inbox without changing the imported line',async({page})=>{
   await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
   const stamp=Date.now(),order=`REVIEW-E2E-${stamp}`,filename=`review-${stamp}.csv`;

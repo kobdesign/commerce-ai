@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { sql } from 'drizzle-orm';
 import { withActor,withTenant,type Tx } from '@commerce/db';
 import { AppError,canReadCosts,canWriteCatalog,productInput,productFamilyInput,productUpdateInput,normalizeLabel,shopInput,nameSchema,uuid,type Context,type Role } from '@commerce/contracts';
 export * from './auth';
@@ -28,17 +27,19 @@ export async function createShop(ctx:Context,input:unknown){
     await audit(tx,ctx,'shop.created',id,{name:data.name});return id;
   });
 }
-export async function catalog(ctx:Context,shopId:string){
+export async function catalog(ctx:Context,shopId:string,search=''){
   return withTenant(ctx,async(tx,role)=>{
-    await assertShop(tx,ctx,shopId);
-    const result=await tx.orm.execute(sql`
-      SELECT v.id,p.id AS "productId",p.name,p.category,p.sales_unit AS "salesUnit",v.sku,p.attributes || v.attributes AS attributes,p.attributes AS "sharedAttributes",v.attributes AS "optionAttributes",v.price_minor AS "priceMinor",v.currency
+    await assertShop(tx,ctx,shopId);const query=search.trim();
+    if(query.length>100)throw new AppError(400,'INVALID_SEARCH','คำค้นยาวเกิน 100 ตัวอักษร');
+    const result=await tx.query<CatalogItem>(`SELECT v.id,p.id AS "productId",p.name,p.category,p.sales_unit AS "salesUnit",v.sku,p.attributes || v.attributes AS attributes,p.attributes AS "sharedAttributes",v.attributes AS "optionAttributes",v.price_minor AS "priceMinor",v.currency
       FROM app.variants v JOIN app.products p ON p.tenant_id=v.tenant_id AND p.id=v.product_id
       JOIN app.shop_products sp ON sp.tenant_id=p.tenant_id AND sp.product_id=p.id
-      WHERE sp.shop_id=${shopId}::uuid AND sp.tenant_id=${ctx.tenantId}::uuid ORDER BY p.created_at DESC,p.name,v.sku LIMIT 200`);
-    const items=result.rows as CatalogItem[];
+      WHERE sp.shop_id=$1 AND sp.tenant_id=$2
+      AND ($3='' OR p.name ILIKE '%'||$3||'%' OR v.sku ILIKE '%'||$3||'%')
+      ORDER BY p.created_at DESC,p.name,v.sku LIMIT 200`,[shopId,ctx.tenantId,query]);
+    const items=result;
     if(canReadCosts(role)){
-      const costs=await tx.query<{variant_id:string;amount_minor:number|null}>(`SELECT DISTINCT ON(variant_id) variant_id,amount_minor FROM app.cost_versions WHERE effective_at<=clock_timestamp() ORDER BY variant_id,effective_at DESC,created_at DESC`);
+      const costs=items.length?await tx.query<{variant_id:string;amount_minor:number|null}>(`SELECT DISTINCT ON(variant_id) variant_id,amount_minor FROM app.cost_versions WHERE variant_id=ANY($1::uuid[]) AND effective_at<=clock_timestamp() ORDER BY variant_id,effective_at DESC,created_at DESC`,[items.map(item=>item.id)]):[];
       const byId=new Map(costs.map(c=>[c.variant_id,c.amount_minor]));
       for(const item of items)item.costMinor=byId.get(item.id)??null;
     }
