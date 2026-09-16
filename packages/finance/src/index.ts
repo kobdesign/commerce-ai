@@ -18,7 +18,7 @@ const eventInput=z.object({
 }).strict();
 const reversalInput=z.object({
   shopId:uuid,
-  sourceEventId:z.string().trim().min(1).max(150),
+  sourceEventId:z.string().trim().min(1).max(150).optional(),
   occurredOn:z.string().refine(value=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value,'วันที่ไม่ถูกต้อง'),
   note:z.string().trim().min(3).max(500),
   confirmedCorrection:z.literal(true),
@@ -69,14 +69,15 @@ export async function reverseFinancialEvent(ctx:Context,eventId:string,input:unk
   const id=uuid.parse(eventId),d=reversalInput.parse(input);
   return withTenant(ctx,async(tx,role)=>{
     access(role);await assertShop(tx,ctx,d.shopId);
+    const sourceEventId=d.sourceEventId??`REV-${id}`;
     await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${ctx.tenantId}:${d.shopId}:reversal:${id}`]);
-    await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${ctx.tenantId}:${d.shopId}:${d.sourceEventId}`]);
+    await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${ctx.tenantId}:${d.shopId}:${sourceEventId}`]);
     const [existing]=await tx.query<{id:string;reversesEventId:string|null;occurredOn:string|Date;note:string}>(`SELECT id,reverses_event_id AS "reversesEventId",occurred_on AS "occurredOn",note
-      FROM app.financial_events WHERE shop_id=$1 AND source_event_id=$2`,[d.shopId,d.sourceEventId]);
+      FROM app.financial_events WHERE shop_id=$1 AND source_event_id=$2`,[d.shopId,sourceEventId]);
     if(existing){
       const same=existing.reversesEventId===id&&isoDate(existing.occurredOn)===d.occurredOn&&existing.note===d.note;
       if(!same)throw new AppError(409,'EVENT_ID_CONFLICT','รหัสรายการต้นทางนี้มีข้อมูลต่างจากรายการเดิม กรุณาตรวจแหล่งข้อมูล');
-      return {id:existing.id,duplicate:true,reversedEventId:id};
+      return {id:existing.id,sourceEventId,duplicate:true,reversedEventId:id};
     }
     const [original]=await tx.query<{orderId:string;eventType:FinancialEventType;amountMinor:number;reversesEventId:string|null;reversedByEventId:string|null}>(`SELECT e.order_id AS "orderId",e.event_type AS "eventType",e.amount_minor AS "amountMinor",e.reverses_event_id AS "reversesEventId",r.id AS "reversedByEventId"
       FROM app.financial_events e LEFT JOIN app.financial_events r ON r.tenant_id=e.tenant_id AND r.shop_id=e.shop_id AND r.reverses_event_id=e.id
@@ -86,9 +87,9 @@ export async function reverseFinancialEvent(ctx:Context,eventId:string,input:unk
     if(original.reversedByEventId)throw new AppError(409,'EVENT_ALREADY_REVERSED','รายการนี้ถูกแก้กลับไว้แล้ว');
     const reversalId=randomUUID();
     await tx.query(`INSERT INTO app.financial_events(tenant_id,id,shop_id,source_event_id,order_id,event_type,occurred_on,amount_minor,source_scope,note,actor_id,reverses_event_id)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,'event_reversal',$9,$10,$11)`,[ctx.tenantId,reversalId,d.shopId,d.sourceEventId,original.orderId,original.eventType,d.occurredOn,original.amountMinor,d.note,ctx.userId,id]);
-    await audit(tx,ctx,'financial_event.reversed',reversalId,{shopId:d.shopId,sourceEventId:d.sourceEventId,reversedEventId:id,orderId:original.orderId,eventType:original.eventType,amountMinor:original.amountMinor});
-    return {id:reversalId,duplicate:false,reversedEventId:id};
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,'event_reversal',$9,$10,$11)`,[ctx.tenantId,reversalId,d.shopId,sourceEventId,original.orderId,original.eventType,d.occurredOn,original.amountMinor,d.note,ctx.userId,id]);
+    await audit(tx,ctx,'financial_event.reversed',reversalId,{shopId:d.shopId,sourceEventId,reversedEventId:id,orderId:original.orderId,eventType:original.eventType,amountMinor:original.amountMinor});
+    return {id:reversalId,sourceEventId,duplicate:false,reversedEventId:id};
   });
 }
 

@@ -58,14 +58,15 @@ describe('Append-only financial events',()=>{
   });
 
   it('reverses a matched refund once while preserving the original event and sales fact',async()=>{
-    const {ctx,orderId,batch}=await sale(),saved=await recordFinancialEvent(ctx,event(orderId,'refund',10000)),input=reversal();
+    const {ctx,orderId,batch}=await sale(),saved=await recordFinancialEvent(ctx,event(orderId,'refund',10000));
+    const input={shopId:demo.shops.tiktok,occurredOn:today,note:'แก้กลับเพราะบันทึกรายการต้นทางซ้ำ',confirmedCorrection:true as const};
     const reversed=await reverseFinancialEvent(ctx,saved.id,input);
-    expect(reversed).toMatchObject({duplicate:false,reversedEventId:saved.id});
+    expect(reversed).toMatchObject({sourceEventId:`REV-${saved.id}`,duplicate:false,reversedEventId:saved.id});
     await expect(reverseFinancialEvent(ctx,saved.id,input)).resolves.toMatchObject({id:reversed.id,duplicate:true});
     const ledger=await financialEvents(ctx,demo.shops.tiktok),adjustment=ledger.byOrder.find(row=>row.orderId===orderId)!;
     expect(adjustment).toMatchObject({eventCount:2,refundMinor:0,feeRebateMinor:0,netAdjustmentMinor:0});
     expect(ledger.items.find(row=>row.id===saved.id)).toMatchObject({reversesEventId:null,reversedByEventId:reversed.id});
-    expect(ledger.items.find(row=>row.id===reversed.id)).toMatchObject({reversesEventId:saved.id,reversedByEventId:null});
+    expect(ledger.items.find(row=>row.id===reversed.id)).toMatchObject({sourceEventId:`REV-${saved.id}`,reversesEventId:saved.id,reversedByEventId:null});
     const [stored]=await withTenant(ctx,tx=>tx.query<{net_receipt_minor:number}>('SELECT net_receipt_minor FROM app.sales_lines WHERE batch_id=$1',[batch.id]));
     expect(stored.net_receipt_minor).toBe(31900);
     expect(await withTenant(ctx,tx=>tx.query("SELECT id FROM app.audit_events WHERE action='financial_event.reversed' AND details->>'reversedEventId'=$1",[saved.id]))).toHaveLength(1);
