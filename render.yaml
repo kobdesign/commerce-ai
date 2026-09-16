@@ -1,0 +1,67 @@
+services:
+  - type: web
+    name: commerce-ai-staging-web
+    runtime: node
+    region: singapore
+    plan: 0.5c-512mb
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: node scripts/render-start.mjs web
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: APP_MODE
+        value: staging-demo
+      - key: AI_ENABLED
+        value: "false"
+      - key: NODE_VERSION
+        value: 22.20.0
+      - key: STAGING_DEMO_PASSWORD
+        sync: false
+      - key: ADMIN_DATABASE_URL
+        fromDatabase:
+          name: commerce-ai-staging-db
+          property: connectionString
+      - fromGroup: commerce-ai-staging-database-roles
+
+  - type: worker
+    name: commerce-ai-staging-worker
+    runtime: node
+    region: singapore
+    plan: 0.5c-512mb
+    buildCommand: npm ci --include=dev
+    startCommand: node scripts/render-start.mjs worker
+    autoDeployTrigger: checksPass
+    maxShutdownDelaySeconds: 60
+    envVars:
+      - key: APP_MODE
+        value: staging-demo
+      - key: AI_ENABLED
+        value: "false"
+      - key: NODE_VERSION
+        value: 22.20.0
+      - key: ADMIN_DATABASE_URL
+        fromDatabase:
+          name: commerce-ai-staging-db
+          property: connectionString
+      - fromGroup: commerce-ai-staging-database-roles
+
+databases:
+  - name: commerce-ai-staging-db
+    region: singapore
+    plan: 0.1c-256mb
+    postgresMajorVersion: "17"
+    databaseName: commerce_staging
+    user: commerce_admin
+    ipAllowList: []
+    storageAutoscalingEnabled: false
+
+envVarGroups:
+  - name: commerce-ai-staging-database-roles
+    envVars:
+      - key: COMMERCE_APP_DB_PASSWORD
+        generateValue: true
+      - key: COMMERCE_IDENTITY_DB_PASSWORD
+        generateValue: true
+      - key: COMMERCE_QUEUE_DB_PASSWORD
+        generateValue: true

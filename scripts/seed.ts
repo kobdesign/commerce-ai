@@ -2,12 +2,15 @@ import { Pool } from 'pg';
 import { randomUUID } from 'node:crypto';
 import { demo } from '../packages/domain/src/demo';
 import { hashPassword } from '../packages/domain/src/auth';
-if(process.env.APP_MODE!=='local-demo')throw new Error('Seeding is only allowed in local-demo.');
+const mode=process.env.APP_MODE;
+if(!['local-demo','staging-demo'].includes(mode??''))throw new Error('Synthetic seeding is only allowed in local-demo or staging-demo.');
+const password=mode==='local-demo'?demo.password:process.env.STAGING_DEMO_PASSWORD;
+if(!password||(mode==='staging-demo'&&(password.length<16||password===demo.password)))throw new Error('STAGING_DEMO_PASSWORD must be at least 16 characters and must not use the local demo password.');
 const db=new Pool({connectionString:process.env.ADMIN_DATABASE_URL});const c=await db.connect();
 try{
  await c.query('BEGIN');
  for(const [id,email,name] of [[demo.users.owner,'owner@chino.demo','คุณเจ้าของร้าน'],[demo.users.other,'owner@goods.demo','เจ้าของ Everyday'],[demo.users.marketing,'marketing@chino.demo','ทีมการตลาด'],[demo.users.consultant,'advisor@commerce.demo','ที่ปรึกษาสององค์กร'],[demo.users.limited,'staff@chino.demo','ทีมร้าน TikTok']]){
-  await c.query('INSERT INTO private.users(id,email,name,password_hash) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO NOTHING',[id,email,name,hashPassword(demo.password)]);
+  await c.query('INSERT INTO private.users(id,email,name,password_hash) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET email=excluded.email,name=excluded.name,password_hash=excluded.password_hash',[id,email,name,hashPassword(password)]);
  }
  for(const [id,name] of [[demo.tenants.chino,'Chino Studio'],[demo.tenants.goods,'Everyday Goods']])await c.query('INSERT INTO app.tenants(id,name) VALUES($1,$2) ON CONFLICT DO NOTHING',[id,name]);
  for(const [tenant,user,role,all] of [[demo.tenants.chino,demo.users.owner,'owner',true],[demo.tenants.goods,demo.users.other,'owner',true],[demo.tenants.chino,demo.users.marketing,'marketing',true],[demo.tenants.chino,demo.users.consultant,'auditor',true],[demo.tenants.goods,demo.users.consultant,'auditor',true],[demo.tenants.chino,demo.users.limited,'operator',false]]){
