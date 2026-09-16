@@ -65,19 +65,20 @@ test('creates a product with dynamic details and six real SKU variants',async({p
 test('inspects CSV, reports row issues and reopens a saved draft without posting revenue',async({page})=>{
  await signIn(page);await page.getByLabel('เลือกร้านค้า',{exact:true}).selectOption(demo.shops.tiktok);
  await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
+ const history=page.locator('details.import-history');
+ await expect(history).not.toHaveAttribute('open','');
  const name='browser-'+Date.now()+'.csv';
  const csv=`order_id,sku,quantity,date,net_sales\n${name}-01,CH-L-BK-32,1,2026-09-16,599\n${name}-02,UNKNOWN,1,2026-09-16,100\n`;
  await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name,mimeType:'text/csv',buffer:Buffer.from(csv)});
  await expect(page.getByRole('heading',{name:'จับคู่คอลัมน์',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();
- await expect(page.getByText('ไม่พบ SKU นี้ในร้านที่เลือก',{exact:true})).toBeVisible();
+ await expect(page.locator('.import-issue-summary')).toContainText('ไม่พบ SKU นี้ในร้านที่เลือก');
  await page.getByRole('button',{name:'บันทึกร่างเพื่อตรวจ',exact:true}).click();
  await expect(page.getByRole('status')).toContainText('ยังไม่รวมเป็นยอดขาย');
- const history=page.locator('details.import-history');
  await expect(history).not.toHaveAttribute('open','');
  await history.locator('summary').click();await expect(history).toHaveAttribute('open','');
  await page.getByRole('link',{name,exact:true}).click();await expect(page).toHaveURL(/draft=/);
- await page.reload();await expect(page.getByText('ไม่พบ SKU นี้ในร้านที่เลือก',{exact:true})).toBeVisible();
+ await page.reload();await expect(page.locator('.import-issue-summary')).toContainText('ไม่พบ SKU นี้ในร้านที่เลือก');
  await expect(page.getByRole('status')).toContainText('ร่างที่บันทึกไว้');
 });
 for(const width of [1280,390])test(`size chips support keyboard, duplicates, removal and safe SKU regeneration at ${width}px`,async({page})=>{

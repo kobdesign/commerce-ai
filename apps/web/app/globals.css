@@ -24,3 +24,7 @@
 @media(max-width:680px){.mobile-signout .icon-button{min-width:44px;min-height:44px}.nav-links a{min-height:44px}.select-wrap select{min-height:44px}.import-history-summary>span:first-child{align-items:flex-start;flex-direction:column;gap:0}.import-history-summary strong{font-size:16px}.history-toggle-label{min-height:44px}}
 
 .mapping-row select{min-height:44px}
+
+/* Import review: keep blocking reasons and recovery actions visible above wide tables. */
+.form-actions .button,.import-confirm .button{min-height:44px}.import-issue-summary{margin:0 18px 18px}.import-issue-summary>p{margin:4px 0 12px}.import-issue-summary ul{list-style:none;margin:0;padding:0;display:grid;gap:9px}.import-issue-summary li{border-top:1px solid currentColor;padding-top:9px}.import-issue-summary li span,.import-issue-summary li code{display:block}.import-issue-summary li code{margin-top:2px}.import-issue-summary li p{margin:4px 0 0}
+@media(max-width:680px){.import-confirm .button{width:100%}.import-issue-summary{margin:0 16px 16px}}

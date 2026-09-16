@@ -37,7 +37,9 @@ test('maps a source line ID and blocks the same marketplace line in a later file
   await page.getByRole('button',{name:'เลือกไฟล์ใหม่',exact:true}).click();
   await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:`source-second-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(csv(`SOURCE-ORDER-B-${stamp}`))});
   await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();
-  await expect(page.getByText('รายการต้นทางนี้ถูกนำเข้าในร้านนี้แล้ว',{exact:true})).toBeVisible();
+  const issueSummary=page.locator('.import-issue-summary');
+  await expect(issueSummary).toContainText('รายการต้นทางนี้ถูกนำเข้าในร้านนี้แล้ว');
+  await expect(issueSummary).toContainText('เลือกไฟล์ใหม่');
   await expect(page.locator('.import-summary>div').filter({hasText:'ต้องแก้ไข'}).locator('strong')).toContainText('1');
 });
 
