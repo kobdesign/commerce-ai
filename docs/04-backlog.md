@@ -1,10 +1,10 @@
 # Backlog และลำดับพัฒนา
 
-สถานะ ณ 2026-09-16: มี **local foundation, generic order-line และ financial-event vertical slice** แล้ว ดู [ผลส่งมอบ v0.7](19-financial-events.md) FND-01/02/03, CAT-01, AI-01 และ QA-01 เริ่มมีโค้ดและการทดสอบ IMP-01/02/03/04 รวม source line deduplication และ FIN-01 บางส่วนสำหรับ refund/fee rebate/unmatched ส่วน production acceptance ยังขาด raw storage, marketplace adapters, reversing corrections, settlement/payout/ads, identity provider, backup/restore และ live model evaluation
+สถานะ ณ 2026-09-16: มี **local foundation, generic order-line และ financial-event vertical slice** แล้ว ดู [ผลส่งมอบ v0.8](20-financial-event-reversals.md) FND-01/02/03, CAT-01, AI-01 และ QA-01 เริ่มมีโค้ดและการทดสอบ IMP-01/02/03/04 รวม source line deduplication และ FIN-01 บางส่วนสำหรับ refund/fee rebate/unmatched/reversal ส่วน production acceptance ยังขาด raw storage, marketplace adapters, settlement/payout/ads, identity provider, backup/restore และ live model evaluation
 
 ## ลำดับ dependency
 
-อัปเดต v0.7: generic CSV รองรับ mapping/review/commit แบบ idempotent, source line deduplication ข้ามไฟล์, snapshot ต้นทุน, refund/fee rebate แบบ append-only, unmatched queue, summary/evidence และ RLS แล้ว ยังไม่ใช่ import worker, marketplace adapter, settlement/payout reconciliation หรือ financial acceptance ครบชุด ดู [ผลส่งมอบ](19-financial-events.md)
+อัปเดต v0.8: generic CSV รองรับ mapping/review/commit แบบ idempotent, source line deduplication ข้ามไฟล์, snapshot ต้นทุน, refund/fee rebate/reversal แบบ append-only, unmatched queue, summary/evidence และ RLS แล้ว ยังไม่ใช่ import worker, marketplace adapter, settlement/payout reconciliation หรือ financial acceptance ครบชุด ดู [ผลส่งมอบ](20-financial-event-reversals.md)
 
 Discovery → Foundations → Import → Reconciliation & Metrics → AI Analysis → Pilot
 

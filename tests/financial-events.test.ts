@@ -3,7 +3,7 @@ import { afterAll,describe,expect,it } from 'vitest';
 import { closePools,resolveContext,withTenant } from '@commerce/db';
 import { createProductFamily,demo } from '@commerce/domain';
 import { commitDraft,financialSummary,saveDraft } from '@commerce/imports';
-import { applyFinancialEvents,financialEvents,recordFinancialEvent,type FinancialEventType } from '@commerce/finance';
+import { applyFinancialEvents,financialEvents,recordFinancialEvent,reverseFinancialEvent,type FinancialEventType } from '@commerce/finance';
 
 afterAll(closePools);
 const today=new Date().toISOString().slice(0,10);
@@ -20,6 +20,7 @@ async function sale(lines=1){
 function event(orderId:string,eventType:FinancialEventType,amountMinor:number,sourceEventId=`EVENT-${randomUUID()}`){
   return {shopId:demo.shops.tiktok,sourceEventId,orderId,eventType,occurredOn:today,amountMinor,note:eventType==='refund'?'คืนเงินบางส่วน ลูกค้ายังเก็บสินค้า':'แพลตฟอร์มคืนค่าธรรมเนียม',confirmedOutsideImportedReceipt:true as const};
 }
+function reversal(sourceEventId=`REVERSAL-${randomUUID()}`){return {shopId:demo.shops.tiktok,sourceEventId,occurredOn:today,note:'แก้กลับเพราะบันทึกรายการต้นทางซ้ำ',confirmedCorrection:true as const};}
 
 describe('Append-only financial events',()=>{
   it('applies a partial refund and fee rebate once without rewriting the sales fact',async()=>{
@@ -56,13 +57,41 @@ describe('Append-only financial events',()=>{
     expect(count).toBe(1);
   });
 
+  it('reverses a matched refund once while preserving the original event and sales fact',async()=>{
+    const {ctx,orderId,batch}=await sale(),saved=await recordFinancialEvent(ctx,event(orderId,'refund',10000));
+    const input={shopId:demo.shops.tiktok,occurredOn:today,note:'แก้กลับเพราะบันทึกรายการต้นทางซ้ำ',confirmedCorrection:true as const};
+    const reversed=await reverseFinancialEvent(ctx,saved.id,input);
+    expect(reversed).toMatchObject({sourceEventId:`REV-${saved.id}`,duplicate:false,reversedEventId:saved.id});
+    await expect(reverseFinancialEvent(ctx,saved.id,input)).resolves.toMatchObject({id:reversed.id,duplicate:true});
+    const ledger=await financialEvents(ctx,demo.shops.tiktok),adjustment=ledger.byOrder.find(row=>row.orderId===orderId)!;
+    expect(adjustment).toMatchObject({eventCount:2,refundMinor:0,feeRebateMinor:0,netAdjustmentMinor:0});
+    expect(ledger.items.find(row=>row.id===saved.id)).toMatchObject({reversesEventId:null,reversedByEventId:reversed.id});
+    expect(ledger.items.find(row=>row.id===reversed.id)).toMatchObject({sourceEventId:`REV-${saved.id}`,reversesEventId:saved.id,reversedByEventId:null});
+    const [stored]=await withTenant(ctx,tx=>tx.query<{net_receipt_minor:number}>('SELECT net_receipt_minor FROM app.sales_lines WHERE batch_id=$1',[batch.id]));
+    expect(stored.net_receipt_minor).toBe(31900);
+    expect(await withTenant(ctx,tx=>tx.query("SELECT id FROM app.audit_events WHERE action='financial_event.reversed' AND details->>'reversedEventId'=$1",[saved.id]))).toHaveLength(1);
+  });
+
+  it('serializes competing reversals and will not reverse a reversal',async()=>{
+    const {ctx,orderId}=await sale(),saved=await recordFinancialEvent(ctx,event(orderId,'fee_rebate',2500));
+    const attempts=await Promise.allSettled([reverseFinancialEvent(ctx,saved.id,reversal()),reverseFinancialEvent(ctx,saved.id,reversal())]);
+    expect(attempts.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+    const rejected=attempts.find(result=>result.status==='rejected') as PromiseRejectedResult;
+    expect(rejected.reason).toMatchObject({code:'EVENT_ALREADY_REVERSED'});
+    const ledger=await financialEvents(ctx,demo.shops.tiktok),reverse=ledger.items.find(row=>row.reversesEventId===saved.id)!;
+    await expect(reverseFinancialEvent(ctx,reverse.id,reversal())).rejects.toMatchObject({code:'REVERSAL_NOT_REVERSIBLE'});
+  });
+
   it('enforces roles, tenant isolation and append-only history at the database layer',async()=>{
     const {ctx,orderId}=await sale(),saved=await recordFinancialEvent(ctx,event(orderId,'refund',900));
     const auditor=await resolveContext(demo.users.consultant,demo.tenants.chino),marketing=await resolveContext(demo.users.marketing,demo.tenants.chino),other=await resolveContext(demo.users.other,demo.tenants.goods);
     expect((await financialEvents(auditor,demo.shops.tiktok)).items.some(row=>row.id===saved.id)).toBe(true);
     await expect(recordFinancialEvent(auditor,event(orderId,'refund',100))).rejects.toMatchObject({status:403});
+    await expect(reverseFinancialEvent(auditor,saved.id,reversal())).rejects.toMatchObject({status:403});
     await expect(financialEvents(marketing,demo.shops.tiktok)).rejects.toMatchObject({status:403});
     await expect(financialEvents(other,demo.shops.tiktok)).rejects.toMatchObject({status:403});
+    await expect(withTenant(ctx,tx=>tx.query(`INSERT INTO app.financial_events(tenant_id,id,shop_id,source_event_id,order_id,event_type,occurred_on,amount_minor,source_scope,note,actor_id,reverses_event_id)
+      VALUES($1,$2,$3,$4,$5,'refund',$6,901,'event_reversal','ยอดไม่ตรงกับรายการเดิม',$7,$8)`,[ctx.tenantId,randomUUID(),demo.shops.tiktok,`FORGED-${randomUUID()}`,orderId,today,ctx.userId,saved.id]))).rejects.toMatchObject({code:'23514'});
     await expect(withTenant(ctx,tx=>tx.query('UPDATE app.financial_events SET amount_minor=1 WHERE id=$1',[saved.id]))).rejects.toMatchObject({code:'42501'});
     await expect(withTenant(ctx,tx=>tx.query('DELETE FROM app.financial_events WHERE id=$1',[saved.id]))).rejects.toMatchObject({code:'42501'});
   });
