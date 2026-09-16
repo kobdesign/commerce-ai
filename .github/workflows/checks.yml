@@ -26,8 +26,8 @@ jobs:
       QUEUE_DATABASE_URL: postgresql://commerce_queue:ci-only-queue@127.0.0.1:5432/commerce_ai
       ADMIN_DATABASE_URL: postgresql://postgres:ci-only-postgres@127.0.0.1:5432/commerce_ai
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
