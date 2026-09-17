@@ -1,10 +1,10 @@
 # Backlog และลำดับพัฒนา
 
-สถานะ ณ 2026-09-17: มี **local foundation, generic order-line, raw source evidence, durable import worker, financial-event, settlement CSV/reconciliation และ shop-expense vertical slice** แล้ว ดู [ผลส่งมอบ v1.4](27-settlement-csv-import.md) FND-01/02/03, CAT-01, AI-01, IMP-01/02/03/04 และ QA-01 เริ่มมีโค้ดและการทดสอบ รวม checksum/source storage, source line deduplication, background commit/retry, refund/fee rebate/unmatched/reversal, statement mapping/preview/atomic commit และค่าใช้จ่ายระดับร้าน ส่วน production acceptance ยังขาด private object storage และ retention policy, marketplace-specific adapters, bank feed, ad statement import, identity provider, backup/restore และ live model evaluation
+สถานะ ณ 2026-09-17: มี **local foundation, generic order-line, raw source evidence, durable import worker, financial-event, settlement CSV/XLSX adapters/reconciliation และ shop-expense vertical slice** แล้ว ดู [ผลส่งมอบ v1.5](28-marketplace-settlement-adapters.md) FND-01/02/03, CAT-01, AI-01, IMP-01/02/03/04 และ QA-01 เริ่มมีโค้ดและการทดสอบ รวม checksum/source storage, source line deduplication, background commit/retry, refund/fee rebate/unmatched/reversal, adapter detection/preview/atomic commit และค่าใช้จ่ายระดับร้าน ส่วน production acceptance ยังขาดไฟล์จริงเพื่อตรวจรับ adapter, private object storage และ retention policy, bank feed, ad statement import, identity provider, backup/restore และ live model evaluation
 
 ## ลำดับ dependency
 
-อัปเดต v1.4: generic CSV รองรับ order และ settlement mapping/review, raw source evidence, atomic/idempotent commit, source line deduplication ข้ามไฟล์, snapshot ต้นทุน, refund/fee rebate, payout reconciliation และบัญชีค่าใช้จ่ายแบบ append-only, unmatched queue, summary/evidence และ RLS แล้ว ยังไม่ใช่ private object storage, marketplace-specific adapter, bank reconciliation หรือ financial acceptance ครบชุด ดู [ผลส่งมอบ](27-settlement-csv-import.md)
+อัปเดต v1.5: CSV/XLSX รองรับ generic mapping และตัวอ่านแบบมีเวอร์ชันสำหรับ TikTok Shop/Shopee/Lazada, raw source evidence, atomic/idempotent commit, source line deduplication ข้ามไฟล์, snapshot ต้นทุน, refund/fee rebate, payout reconciliation และบัญชีค่าใช้จ่ายแบบ append-only, unmatched queue, summary/evidence และ RLS แล้ว Marketplace adapters ยังอยู่สถานะ synthetic contract จนกว่าจะตรวจรับกับไฟล์จริง และยังไม่ใช่ private object storage, bank reconciliation หรือ financial acceptance ครบชุด ดู [ผลส่งมอบ](28-marketplace-settlement-adapters.md)
 
 Discovery → Foundations → Import → Reconciliation & Metrics → AI Analysis → Pilot
 
@@ -36,7 +36,7 @@ AI เริ่มอยู่ใน import workflow และต้องพร
 | REL-01 | Staging rehearsal + restore + kill switch | P0 | UI-01, QA-01, QA-02 | Engineering | ซ้อม import failure/model outage/restore ผ่าน |
 | PILOT-01 | ใช้งานจริงร้านแฟนและวัด baseline เทียบผล | P0 | REL-01 | Product + เจ้าของร้าน | user sign-off; บันทึกผลจริงและปัญหาโดยไม่แต่งตัวเลข |
 | PILOT-02 | 3–5 ร้านที่อนุญาตทดลอง | P1 | PILOT-01 | Product | onboarding ใช้ flow ร่วม; ตรวจ retention/support cost |
-| CON-01 | Shopee/Lazada adapters หรือ API ที่ได้สิทธิ์ | P1 | PILOT-01 | Engineering | contract tests ด้วย schema จริงและ seller authorization |
+| CON-01 | TikTok/Shopee/Lazada adapters หรือ API ที่ได้สิทธิ์ — synthetic contracts เสร็จ; รอไฟล์จริงตรวจรับ | P1 | PILOT-01 | Engineering | contract tests ด้วย schema จริงและ seller authorization |
 | ENT-01 | Enterprise discovery + requirements mapping | P1 | PILOT-01 | Product + Tech lead | ข้อกำหนดและค่าใช้จ่ายจริงก่อนรับปากส่งมอบ |
 | ENT-02 | SSO/SCIM/approval/SIEM/dedicated ตามสัญญา | P2 | ENT-01 | Engineering | UAT/security/DR ตามเกณฑ์ลูกค้า; ไม่เปิดด้วย mock |
 

@@ -118,9 +118,9 @@ test('reconciles a marketplace payout with an imported order on mobile',async({p
 
 test('imports a settlement CSV with mapping, preview and immutable source evidence',async({page})=>{
   await page.setViewportSize({width:390,height:900});const stamp=Date.now(),order=await importedOrder(stamp,'SETTLEMENT-CSV'),payout=`PAYOUT-CSV-${stamp}`,payoutLine=`PAYOUT-CSV-LINE-${stamp}`;
-  await signIn(page);await page.getByRole('link',{name:'กระทบยอดเงินโอน',exact:true}).click();await page.getByText('นำเข้า statement จาก CSV',{exact:true}).click();
+  await signIn(page);await page.getByRole('link',{name:'กระทบยอดเงินโอน',exact:true}).click();await page.getByText('นำเข้า statement จากไฟล์',{exact:true}).click();
   const statementCsv=`payout_reference,settled_on,payout_total,source_line_id,order_id,allocation_amount,note\n${payout},${soldOn},319.00,${payoutLine},${order},319.00,Statement CSV ทดสอบ\n`;
-  await page.getByLabel('เลือกไฟล์ statement CSV',{exact:true}).setInputFiles({name:`statement-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(statementCsv)});
+  await page.getByLabel('เลือกไฟล์ statement CSV หรือ XLSX',{exact:true}).setInputFiles({name:`statement-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(statementCsv)});
   await expect(page.getByRole('heading',{name:'จับคู่คอลัมน์',exact:true})).toBeVisible();await expect(page.getByLabel('คอลัมน์ รหัสรอบโอน',{exact:true})).toHaveValue('payout_reference');
   await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();await expect(page.getByText(order,{exact:true}).first()).toBeVisible();await expect(page.getByText('พร้อมนำเข้า',{exact:true})).toBeVisible();
   await page.getByRole('checkbox',{name:/มาจาก statement นี้/}).check();await page.getByRole('button',{name:'ยืนยันนำเข้า statement',exact:true}).click();await expect(page.getByRole('status')).toContainText('นำเข้า 1 บรรทัด จาก 1 รอบโอนแล้ว');
@@ -128,6 +128,18 @@ test('imports a settlement CSV with mapping, preview and immutable source eviden
   const downloadPromise=page.waitForEvent('download');await page.getByLabel(`ดาวน์โหลดไฟล์ต้นฉบับ statement-${stamp}.csv`,{exact:true}).click();const download=await downloadPromise,downloadPath=await download.path();expect(downloadPath).not.toBeNull();expect(await readFile(downloadPath!,'utf8')).toBe(statementCsv);
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.screenshot({path:'artifacts/settlement-csv-import-390.png',fullPage:true});
+});
+
+test('detects a Shopee statement and skips manual column mapping',async({page})=>{
+  await page.setViewportSize({width:390,height:900});const stamp=Date.now(),order=await importedOrder(stamp,'SHOPEE-ADAPTER');
+  await signIn(page);await page.getByRole('link',{name:'กระทบยอดเงินโอน',exact:true}).click();await page.getByText('นำเข้า statement จากไฟล์',{exact:true}).click();
+  const template=await readFile('apps/web/public/examples/shopee-income-synthetic.csv','utf8'),csv=template.replace('SP-ORDER-10001',order).replaceAll('SP-PAYOUT-20260917-01',`SP-PAYOUT-${stamp}`).replace('SP-TXN-10001',`SP-TXN-${stamp}-1`).replace('SP-TXN-10002',`SP-TXN-${stamp}-2`);
+  const filename=`Income.paid.${stamp}.csv`;await page.getByLabel('เลือกไฟล์ statement CSV หรือ XLSX',{exact:true}).setInputFiles({name:filename,mimeType:'text/csv',buffer:Buffer.from(csv)});
+  await expect(page.getByText(/ตรวจจับ: Shopee/)).toBeVisible();await expect(page.getByRole('heading',{name:'จับคู่คอลัมน์',exact:true})).toHaveCount(0);await expect(page.getByText(order,{exact:true})).toBeVisible();
+  await page.getByRole('checkbox',{name:/มาจาก statement นี้/}).check();await page.getByRole('button',{name:'ยืนยันนำเข้า statement',exact:true}).click();await expect(page.getByRole('status')).toContainText('นำเข้า 2 บรรทัด จาก 1 รอบโอนแล้ว');
+  const downloadPromise=page.waitForEvent('download');await page.getByLabel(`ดาวน์โหลดไฟล์ต้นฉบับ ${filename}`,{exact:true}).click();const download=await downloadPromise,downloadPath=await download.path();expect(downloadPath).not.toBeNull();expect(await readFile(downloadPath!,'utf8')).toBe(csv);
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.screenshot({path:'artifacts/shopee-settlement-adapter-390.png',fullPage:true});
 });
 
 test('confirms a missing cost from the review inbox without changing the imported line',async({page})=>{

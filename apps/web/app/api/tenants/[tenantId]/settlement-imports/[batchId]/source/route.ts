@@ -14,7 +14,7 @@ export async function GET(_req:Request,{params}:{params:Promise<{tenantId:string
     const {tenantId,batchId}=await params,ctx=await apiContext(tenantId),source=await getSettlementImportSource(ctx,batchId);
     return new Response(new Uint8Array(source.content),{headers:{
       'Cache-Control':'private, no-store','Content-Disposition':contentDisposition(source.filename),'Content-Length':String(source.byteSize),
-      'Content-Type':`${source.contentType}; charset=utf-8`,'ETag':`"${source.sourceHash}"`,'X-Content-SHA256':source.sourceHash,'X-Content-Type-Options':'nosniff',
+      'Content-Type':source.contentType==='text/csv'?`${source.contentType}; charset=utf-8`:source.contentType,'ETag':`"${source.sourceHash}"`,'X-Content-SHA256':source.sourceHash,'X-Content-Type-Options':'nosniff',
     }});
   }catch(error){
     if(error instanceof AppError)return Response.json({error:error.message,code:error.code},{status:error.status,headers:{'Cache-Control':'private, no-store'}});

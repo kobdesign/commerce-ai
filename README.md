@@ -2,9 +2,11 @@
 
 ชื่อชั่วคราวสำหรับโครงการช่วยร้านค้าออนไลน์ตรวจเงินรับและกำไร มี AI ในกระบวนการทำงาน รองรับหลายองค์กร และมีเส้นทางขยายสู่ Enterprise
 
-สถานะ: **Product workflow v1.4 — เว็บแอป, import worker และ PostgreSQL พร้อมเตรียม staging บน Render**
+สถานะ: **Product workflow v1.5 — เว็บแอป, import worker และ PostgreSQL พร้อมเตรียม staging บน Render**
 
-มี login, หลายบริษัท/ร้าน, catalog หลายประเภทสินค้า, รายละเอียดที่เพิ่มเองได้, หลาย SKU ต่อสินค้า, แก้ไขรายละเอียด/ราคา/ต้นทุนพร้อมประวัติ, สิทธิ์รายบทบาท/ร้าน, audit, AI tool preview, flow ตรวจรายการขายและส่งยืนยันให้ worker ทำต่อเบื้องหลัง, หลักฐานไฟล์ต้นฉบับพร้อม checksum, source line identity ป้องกันยอดซ้ำข้ามไฟล์, Review Inbox สำหรับยืนยันต้นทุนที่ขาด, refund/fee rebate, การนำเข้าและกระทบยอด statement ต่อรอบโอนและคำสั่งซื้อ และบัญชีค่าใช้จ่ายร้านแบบ append-only พร้อมการแก้กลับโดยไม่ลบหลักฐานแล้ว ข้อมูลเริ่มต้นเป็นข้อมูลสมมติ ตัวเลข “เงินเหลือหลังค่าใช้จ่ายที่บันทึก” ยังไม่ใช่กำไรสุทธิหรือระบบ production/Enterprise ที่ตรวจรับแล้ว การสร้างทรัพยากร Render จริงต้องตรวจราคาและยืนยันใน Render Dashboard ก่อน
+มี login, หลายบริษัท/ร้าน, catalog หลายประเภทสินค้า, รายละเอียดที่เพิ่มเองได้, หลาย SKU ต่อสินค้า, แก้ไขรายละเอียด/ราคา/ต้นทุนพร้อมประวัติ, สิทธิ์รายบทบาท/ร้าน, audit, AI tool preview, flow ตรวจรายการขายและส่งยืนยันให้ worker ทำต่อเบื้องหลัง, หลักฐานไฟล์ต้นฉบับพร้อม checksum, source line identity ป้องกันยอดซ้ำข้ามไฟล์, Review Inbox สำหรับยืนยันต้นทุนที่ขาด, refund/fee rebate, การนำเข้าและกระทบยอด statement ต่อรอบโอนและคำสั่งซื้อ, ตัวอ่าน CSV/XLSX แบบมีเวอร์ชันสำหรับ TikTok Shop/Shopee/Lazada และบัญชีค่าใช้จ่ายร้านแบบ append-only พร้อมการแก้กลับโดยไม่ลบหลักฐานแล้ว ข้อมูลเริ่มต้นเป็นข้อมูลสมมติ ตัวเลข “เงินเหลือหลังค่าใช้จ่ายที่บันทึก” ยังไม่ใช่กำไรสุทธิหรือระบบ production/Enterprise ที่ตรวจรับแล้ว การสร้างทรัพยากร Render จริงต้องตรวจราคาและยืนยันใน Render Dashboard ก่อน
+
+ตัวอ่าน statement แยกแพลตฟอร์มและการตรวจจับอัตโนมัติ: [Product workflow v1.5](docs/28-marketplace-settlement-adapters.md)
 
 การนำเข้า statement หลายบรรทัดจาก CSV พร้อม preview และหลักฐานต้นฉบับ: [Product workflow v1.4](docs/27-settlement-csv-import.md)
 
@@ -53,7 +55,7 @@ npm run dev
 
 คู่มือคำสั่ง บัญชีทดสอบ ขอบเขตฟีเจอร์และข้อจำกัด: [Foundation runbook](docs/10-foundation-runbook.md)
 
-ผลตรวจล่าสุด: **72 integration tests และ 20 browser tests ผ่าน** รวม settlement CSV import, settlement reconciliation, durable import jobs, raw source evidence, shop expense ledger และ health check สำหรับ staging ดู [ผลตรวจ v1.4](docs/27-settlement-csv-import.md), [Render staging readiness](docs/21-render-staging.md) หรือ [Business Logic verification](docs/15-business-logic-verification.md)
+ผลตรวจล่าสุด: **75 integration tests และ 21 browser tests ผ่าน** รวม marketplace settlement adapters, XLSX parsing, settlement reconciliation, durable import jobs, raw source evidence, shop expense ledger และ health check สำหรับ staging ดู [ผลตรวจ v1.5](docs/28-marketplace-settlement-adapters.md), [Render staging readiness](docs/21-render-staging.md) หรือ [Business Logic verification](docs/15-business-logic-verification.md)
 
 เอกสารอ้างอิงบทสนทนาของผู้ใช้ ข้อมูลร้านจริงและเทคโนโลยีที่ทีมถนัดยังรอยืนยัน ตัวอย่างทั้งหมดที่ติดป้าย synthetic ไม่ใช่ข้อมูลร้านหรือรูปแบบไฟล์ทางการของแพลตฟอร์ม
 
@@ -75,7 +77,7 @@ npm run dev
 
 องค์กรที่ได้รับอนุญาตนำเข้าข้อมูล → ตรวจคุณภาพและ mapping → จับคู่รายการเงิน → คำนวณเงินเหลือ → AI อธิบายพร้อมหลักฐาน → ผู้ใช้จัดการรายการที่ต้องตรวจ
 
-เริ่มจากรายงาน TikTok ของร้านแฟน ผ่านไฟล์จริงที่ร้านดาวน์โหลดได้ รูปแบบไฟล์และความครบถ้วนต้องสำรวจก่อนเขียน adapter ส่วน Shopee/Lazada ใช้สัญญา adapter เดียวกันในระยะถัดไป
+เริ่มจากรายงาน TikTok ของร้านแฟน ผ่านไฟล์จริงที่ร้านดาวน์โหลดได้ Adapter contract สำหรับ TikTok/Shopee/Lazada และตัวอย่างสมมติมีแล้ว แต่รูปแบบและความครบถ้วนยังต้องตรวจรับกับ export จริงที่ปกปิดข้อมูลส่วนตัว
 
 Product model เป็นกลางต่อหมวดสินค้า กางเกงเป็น pilot แรก เวอร์ชันแรกวางแผนรองรับสินค้าทางกายภาพที่ขายเป็นหน่วยนับและมีต้นทุนอ้างอิงได้ ทั้งมีและไม่มีตัวเลือก ข้อมูลสี/ไซซ์เป็น attributes; batch/expiry, serial, หน่วยชั่งตวง, bundle components และ subscription เป็นความสามารถขยายที่ต้องตรวจรับแยก
 
@@ -84,6 +86,6 @@ Product model เป็นกลางต่อหมวดสินค้า �
 - ทำ discovery จากงานจริงและรายงานที่ตัดข้อมูลส่วนบุคคลไม่จำเป็นออก
 - ยืนยันสูตรและความหมายของข้อมูลกับผู้ดูแลการเงิน
 - ใช้ TypeScript / Next.js / PostgreSQL เป็นฐานที่ติดตั้งแล้ว และยืนยันข้อจำกัดการให้บริการก่อน production
-- ตรวจ schema รายงาน TikTok จริง แล้วเชื่อม adapter เข้าสัญญา order/settlement กลางที่มีอยู่ → รายงานค่าโฆษณา → ตรวจสูตรจากข้อมูลจริง โดยคงชุดทดสอบ Tenant A/B
+- ตรวจ schema รายงาน TikTok/Shopee/Lazada จริงกับ adapter version ที่มีอยู่ → รายงานค่าโฆษณา → ตรวจสูตรจากข้อมูลจริง โดยคงชุดทดสอบ Tenant A/B
 
 ไม่มีกำหนดส่งที่ยืนยันแล้ว รอบพัฒนาเป็นลำดับงาน ไม่ใช่คำสัญญาระยะเวลา
