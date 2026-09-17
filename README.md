@@ -8,6 +8,8 @@
 
 บัญชีค่าโฆษณา เงินเดือน การเดินทาง และค่าใช้จ่ายระดับร้าน: [Product workflow v1.0](docs/22-shop-expense-ledger.md)
 
+ผลตรวจรับบัญชีค่าใช้จ่ายครบทั้งหน้าจอ API ฐานข้อมูล สิทธิ์ และการแยกบริษัท: [Shop expense UAT](docs/23-shop-expense-uat.md)
+
 โครงสร้างและคู่มือ staging บน Render: [Render staging readiness](docs/21-render-staging.md)
 
 การแก้กลับรายการการเงินที่บันทึกผิด: [Product workflow v0.8](docs/20-financial-event-reversals.md)
