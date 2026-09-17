@@ -1,10 +1,10 @@
 # Backlog และลำดับพัฒนา
 
-สถานะ ณ 2026-09-17: มี **local foundation, generic order-line, raw source evidence, durable import worker, financial-event และ shop-expense vertical slice** แล้ว ดู [ผลส่งมอบ v1.2](25-async-import-worker.md) FND-01/02/03, CAT-01, AI-01, IMP-01/02/03/04 และ QA-01 เริ่มมีโค้ดและการทดสอบ รวม checksum/source storage, source line deduplication, background commit/retry, refund/fee rebate/unmatched/reversal และค่าใช้จ่ายระดับร้าน ส่วน production acceptance ยังขาด private object storage และ retention policy, marketplace adapters, settlement/payout, ad statement import, identity provider, backup/restore และ live model evaluation
+สถานะ ณ 2026-09-17: มี **local foundation, generic order-line, raw source evidence, durable import worker, financial-event, settlement reconciliation และ shop-expense vertical slice** แล้ว ดู [ผลส่งมอบ v1.3](26-settlement-reconciliation.md) FND-01/02/03, CAT-01, AI-01, IMP-01/02/03/04 และ QA-01 เริ่มมีโค้ดและการทดสอบ รวม checksum/source storage, source line deduplication, background commit/retry, refund/fee rebate/unmatched/reversal, statement allocation และค่าใช้จ่ายระดับร้าน ส่วน production acceptance ยังขาด private object storage และ retention policy, marketplace adapters, bank feed, ad statement import, identity provider, backup/restore และ live model evaluation
 
 ## ลำดับ dependency
 
-อัปเดต v1.2: generic CSV รองรับ raw source evidence, mapping/review และ commit แบบ background + idempotent, สถานะ/auto retry/replay, source line deduplication ข้ามไฟล์, snapshot ต้นทุน, refund/fee rebate และบัญชีค่าใช้จ่ายแบบ append-only, unmatched queue, summary/evidence และ RLS แล้ว ยังไม่ใช่ private object storage, marketplace adapter, settlement/payout reconciliation หรือ financial acceptance ครบชุด ดู [ผลส่งมอบ](25-async-import-worker.md)
+อัปเดต v1.3: generic CSV รองรับ raw source evidence, mapping/review และ commit แบบ background + idempotent, สถานะ/auto retry/replay, source line deduplication ข้ามไฟล์, snapshot ต้นทุน, refund/fee rebate, statement payout reconciliation และบัญชีค่าใช้จ่ายแบบ append-only, unmatched queue, summary/evidence และ RLS แล้ว ยังไม่ใช่ private object storage, marketplace adapter, bank reconciliation หรือ financial acceptance ครบชุด ดู [ผลส่งมอบ](26-settlement-reconciliation.md)
 
 Discovery → Foundations → Import → Reconciliation & Metrics → AI Analysis → Pilot
 
@@ -26,7 +26,7 @@ AI เริ่มอยู่ใน import workflow และต้องพร
 | AI-02 | AI mapping assistant | P0 | IMP-02, AI-01 | Engineering | เสนอ mapping ได้; ไม่เขียนจำนวนเงินเอง; ambiguous ต้องตรวจ |
 | IMP-03 | SKU mapping + effective cost history | P0 | IMP-02, CAT-01 | Engineering + การเงิน | missing cost flagged; cost version มีวันที่และ audit; attributes ไม่เป็น hardcoded key |
 | IMP-04 | Import worker + replay/duplicate handling | P0 | IMP-02, FND-04 | Engineering | duplicate ไม่เพิ่มยอด; correction version รองรับ |
-| FIN-01 | Financial events และ settlement matching | P0 | IMP-03, IMP-04 | Engineering + การเงิน | one-to-many, unmatched, partial refund ผ่าน fixtures |
+| FIN-01 | Financial events และ settlement matching — canonical vertical slice เสร็จ; รอ schema/statement จริงตรวจรับ | P0 | IMP-03, IMP-04 | Engineering + การเงิน | one-to-many, unmatched, partial refund ผ่าน fixtures |
 | FIN-02 | Metrics + evidence API | P0 | FIN-01, DISC-02 | Engineering | exact expected values; actual/allocated/incomplete ไม่ปน |
 | UI-01 | Summary + evidence detail + review inbox | P0 | FIN-02 | Engineering + Product | ผู้ใช้ตามยอดถึงต้นทางและจัดการรายการได้ |
 | AI-03 | Evidence-backed analyst tools | P0 | AI-01, FIN-02 | Engineering | citations resolve; unauthorized metric ถูกปฏิเสธ |

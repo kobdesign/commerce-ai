@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight,FileInput,ReceiptText,WalletCards } from 'lucide-react';
+import { ArrowRight,FileInput,Landmark,ReceiptText,WalletCards } from 'lucide-react';
 import { financialSummary } from '@commerce/imports';
 import { applyFinancialEvents,applyShopExpenses,financialEvents,shopExpenses,type ShopExpenseType } from '@commerce/finance';
 import { workspace } from '../../../lib/server';
@@ -16,7 +16,7 @@ export default async function PerformancePage(){
   const eventByOrder=new Map(eventData.byOrder.map(row=>[row.orderId,row])),adjustedTotal=applyFinancialEvents(data.total.netReceiptMinor,data.total.cogsMinor,eventData.summary.matchedRefundMinor,eventData.summary.matchedFeeRebateMinor);
   const afterExpenses=applyShopExpenses(complete?adjustedTotal.adjustedContributionMinor:null,expenseData.summary.activeAmountMinor);
   return <>
-    <div className="page-heading"><div><h1>เงินรับและต้นทุน</h1><p>{w.shop.name} · ข้อมูลที่ยืนยันนำเข้าแล้วทั้งหมด</p></div><div className="page-heading-actions"><Link href="/imports" className="button secondary"><FileInput size={17}/>นำเข้ารายงาน</Link><Link href="/financial-events" className="button secondary"><ReceiptText size={17}/>คืนเงินและปรับยอด</Link><Link href="/expenses" className="button secondary"><WalletCards size={17}/>ค่าใช้จ่ายร้าน</Link></div></div>
+    <div className="page-heading"><div><h1>เงินรับและต้นทุน</h1><p>{w.shop.name} · ข้อมูลที่ยืนยันนำเข้าแล้วทั้งหมด</p></div><div className="page-heading-actions"><Link href="/imports" className="button secondary"><FileInput size={17}/>นำเข้ารายงาน</Link><Link href="/financial-events" className="button secondary"><ReceiptText size={17}/>คืนเงินและปรับยอด</Link><Link href="/settlements" className="button secondary"><Landmark size={17}/>กระทบยอดเงินโอน</Link><Link href="/expenses" className="button secondary"><WalletCards size={17}/>ค่าใช้จ่ายร้าน</Link></div></div>
     <section className="summary-strip performance-summary" aria-label="สรุปเงินรับและต้นทุน">
       <div><span>คำสั่งซื้อ</span><strong>{data.total.orderCount}<small>คำสั่งซื้อ</small></strong></div>
       <div><span>เงินรับสุทธิตามไฟล์</span><strong>{money(data.total.netReceiptMinor)}</strong></div>

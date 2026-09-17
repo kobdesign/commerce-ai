@@ -127,6 +127,141 @@ export function applyFinancialEvents(netReceiptMinor:number,cogsMinor:number|nul
   return {adjustedReceiptMinor,adjustedContributionMinor:cogsMinor===null?null:adjustedReceiptMinor-cogsMinor};
 }
 
+const settlementInput=z.object({
+  shopId:uuid,
+  sourceLineId:z.string().trim().min(1).max(150),
+  payoutReference:z.string().trim().min(1).max(150),
+  orderId:z.string().trim().min(1).max(100),
+  settledOn:z.string().refine(value=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value,'วันที่ไม่ถูกต้อง'),
+  payoutTotalMinor:z.number().int().min(1).max(1_000_000_000),
+  amountMinor:z.number().int().min(1).max(1_000_000_000),
+  note:z.string().trim().min(3).max(500),
+  confirmedStatement:z.literal(true),
+}).strict();
+const settlementReversalInput=z.object({
+  shopId:uuid,
+  note:z.string().trim().min(3).max(500),
+  confirmedCorrection:z.literal(true),
+}).strict();
+
+function settlementAccess(role:string,write=true){
+  if(!(write?['owner','finance']:['owner','finance','auditor']).includes(role))throw new AppError(403,'FORBIDDEN','คุณไม่มีสิทธิ์จัดการการกระทบยอดเงินโอน');
+}
+
+export type SettlementLineItem={
+  id:string;sourceLineId:string;payoutReference:string;orderId:string;settledOn:string;payoutTotalMinor:number;
+  amountMinor:number;note:string;createdAt:string;matched:boolean;reversesLineId:string|null;reversedByLineId:string|null;
+};
+export type SettlementPayout={payoutReference:string;settledOn:string;payoutTotalMinor:number;allocatedMinor:number;differenceMinor:number;activeLineCount:number;unmatchedLineCount:number};
+export type SettlementOrder={orderId:string;expectedReceiptMinor:number;settledMinor:number;differenceMinor:number;settlementLineCount:number};
+export type SettlementSummary={payoutCount:number;balancedPayoutCount:number;unresolvedPayoutCount:number;reportedPayoutMinor:number;allocatedMinor:number;unmatchedLineCount:number;reconciledOrderCount:number;unresolvedOrderCount:number};
+export type SettlementLedger={summary:SettlementSummary;payouts:SettlementPayout[];orders:SettlementOrder[];items:SettlementLineItem[];limit:number;asOf:string};
+
+export async function recordSettlementLine(ctx:Context,input:unknown){
+  const d=settlementInput.parse(input);
+  return withTenant(ctx,async(tx,role)=>{
+    settlementAccess(role);await assertShop(tx,ctx,d.shopId);
+    await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${ctx.tenantId}:${d.shopId}:settlement-source:${d.sourceLineId}`]);
+    await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${ctx.tenantId}:${d.shopId}:payout:${d.payoutReference}`]);
+    const [existing]=await tx.query<{id:string;payoutReference:string;orderId:string;settledOn:string|Date;payoutTotalMinor:number;amountMinor:number;note:string}>(`SELECT id,payout_reference AS "payoutReference",order_id AS "orderId",settled_on AS "settledOn",payout_total_minor AS "payoutTotalMinor",amount_minor AS "amountMinor",note
+      FROM app.settlement_lines WHERE shop_id=$1 AND source_line_id=$2`,[d.shopId,d.sourceLineId]);
+    if(existing){
+      const same=existing.payoutReference===d.payoutReference&&existing.orderId===d.orderId&&isoDate(existing.settledOn)===d.settledOn&&existing.payoutTotalMinor===d.payoutTotalMinor&&existing.amountMinor===d.amountMinor&&existing.note===d.note;
+      if(!same)throw new AppError(409,'SETTLEMENT_LINE_CONFLICT','รหัสบรรทัดต้นทางนี้มีข้อมูลต่างจากรายการเดิม กรุณาตรวจ statement');
+      return {id:existing.id,duplicate:true,matchedLineCount:await matchedLines(d.shopId,d.orderId,tx.query)};
+    }
+    const [payout]=await tx.query<{settledOn:string|Date;payoutTotalMinor:number}>(`SELECT settled_on AS "settledOn",payout_total_minor AS "payoutTotalMinor" FROM app.settlement_lines
+      WHERE shop_id=$1 AND payout_reference=$2 AND reverses_line_id IS NULL LIMIT 1`,[d.shopId,d.payoutReference]);
+    if(payout&&(isoDate(payout.settledOn)!==d.settledOn||payout.payoutTotalMinor!==d.payoutTotalMinor))throw new AppError(409,'PAYOUT_SUMMARY_CONFLICT','รอบโอนนี้มีวันที่หรือยอดโอนรวมต่างจากรายการเดิม');
+    const id=randomUUID();
+    await tx.query(`INSERT INTO app.settlement_lines(tenant_id,id,shop_id,source_line_id,payout_reference,order_id,settled_on,payout_total_minor,amount_minor,source_scope,note,actor_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'settlement_statement',$10,$11)`,[ctx.tenantId,id,d.shopId,d.sourceLineId,d.payoutReference,d.orderId,d.settledOn,d.payoutTotalMinor,d.amountMinor,d.note,ctx.userId]);
+    const matchedLineCount=await matchedLines(d.shopId,d.orderId,tx.query);
+    await audit(tx,ctx,'settlement.line.recorded',id,{shopId:d.shopId,sourceLineId:d.sourceLineId,payoutReference:d.payoutReference,orderId:d.orderId,payoutTotalMinor:d.payoutTotalMinor,amountMinor:d.amountMinor,matchedLineCount});
+    return {id,duplicate:false,matchedLineCount};
+  });
+}
+
+export async function reverseSettlementLine(ctx:Context,lineId:string,input:unknown){
+  const id=uuid.parse(lineId),d=settlementReversalInput.parse(input);
+  return withTenant(ctx,async(tx,role)=>{
+    settlementAccess(role);await assertShop(tx,ctx,d.shopId);
+    await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${ctx.tenantId}:${d.shopId}:settlement-reversal:${id}`]);
+    const [original]=await tx.query<{sourceLineId:string;payoutReference:string;orderId:string;settledOn:string|Date;payoutTotalMinor:number;amountMinor:number;reversesLineId:string|null;reversedByLineId:string|null}>(`SELECT e.source_line_id AS "sourceLineId",e.payout_reference AS "payoutReference",e.order_id AS "orderId",e.settled_on AS "settledOn",e.payout_total_minor AS "payoutTotalMinor",e.amount_minor AS "amountMinor",e.reverses_line_id AS "reversesLineId",r.id AS "reversedByLineId"
+      FROM app.settlement_lines e LEFT JOIN app.settlement_lines r ON r.tenant_id=e.tenant_id AND r.shop_id=e.shop_id AND r.reverses_line_id=e.id
+      WHERE e.shop_id=$1 AND e.id=$2`,[d.shopId,id]);
+    if(!original)throw new AppError(404,'SETTLEMENT_LINE_NOT_FOUND','ไม่พบบรรทัดเงินโอนที่ต้องการแก้กลับ');
+    if(original.reversesLineId)throw new AppError(409,'REVERSAL_NOT_REVERSIBLE','รายการแก้กลับไม่สามารถถูกแก้กลับซ้ำได้');
+    if(original.reversedByLineId)return {id:original.reversedByLineId,sourceLineId:`REV-${id}`,duplicate:true,reversedLineId:id};
+    const reversalId=randomUUID(),sourceLineId=`REV-${id}`;
+    await tx.query(`INSERT INTO app.settlement_lines(tenant_id,id,shop_id,source_line_id,payout_reference,order_id,settled_on,payout_total_minor,amount_minor,source_scope,note,actor_id,reverses_line_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'settlement_reversal',$10,$11,$12)`,[ctx.tenantId,reversalId,d.shopId,sourceLineId,original.payoutReference,original.orderId,isoDate(original.settledOn),original.payoutTotalMinor,original.amountMinor,d.note,ctx.userId,id]);
+    await audit(tx,ctx,'settlement.line.reversed',reversalId,{shopId:d.shopId,sourceLineId,reversedLineId:id,payoutReference:original.payoutReference,orderId:original.orderId,amountMinor:original.amountMinor});
+    return {id:reversalId,sourceLineId,duplicate:false,reversedLineId:id};
+  });
+}
+
+export async function settlements(ctx:Context,shopId:string):Promise<SettlementLedger>{
+  return withTenant(ctx,async(tx,role)=>{
+    settlementAccess(role,false);await assertShop(tx,ctx,shopId);
+    type RawPayout=Omit<SettlementPayout,'settledOn'|'allocatedMinor'|'differenceMinor'>&{settledOn:string|Date;allocatedMinor:string};
+    const payoutRows=await tx.query<RawPayout>(`SELECT e.payout_reference AS "payoutReference",max(e.settled_on) AS "settledOn",max(e.payout_total_minor)::int AS "payoutTotalMinor",
+      coalesce(sum(CASE WHEN e.reverses_line_id IS NULL THEN e.amount_minor ELSE -e.amount_minor END),0)::text AS "allocatedMinor",
+      count(*) FILTER(WHERE e.reverses_line_id IS NULL AND NOT EXISTS(SELECT 1 FROM app.settlement_lines r WHERE r.tenant_id=e.tenant_id AND r.shop_id=e.shop_id AND r.reverses_line_id=e.id))::int AS "activeLineCount",
+      count(*) FILTER(WHERE e.reverses_line_id IS NULL AND NOT EXISTS(SELECT 1 FROM app.settlement_lines r WHERE r.tenant_id=e.tenant_id AND r.shop_id=e.shop_id AND r.reverses_line_id=e.id) AND NOT EXISTS(SELECT 1 FROM app.sales_lines l WHERE l.tenant_id=e.tenant_id AND l.shop_id=e.shop_id AND l.order_id=e.order_id))::int AS "unmatchedLineCount"
+      FROM app.settlement_lines e WHERE e.shop_id=$1 GROUP BY e.payout_reference ORDER BY max(e.settled_on) DESC,max(e.created_at) DESC LIMIT 100`,[shopId]);
+    const payouts=payoutRows.map(row=>{const allocatedMinor=Number(row.allocatedMinor);return {...row,settledOn:isoDate(row.settledOn),allocatedMinor,differenceMinor:allocatedMinor-row.payoutTotalMinor};});
+    type RawPayoutSummary={payoutCount:number;balancedPayoutCount:number;reportedPayoutMinor:string;allocatedMinor:string;unmatchedLineCount:number};
+    const [payoutSummary]=await tx.query<RawPayoutSummary>(`WITH grouped AS (
+        SELECT e.tenant_id,e.shop_id,e.payout_reference,max(e.payout_total_minor)::bigint AS reported,
+          sum(CASE WHEN e.reverses_line_id IS NULL THEN e.amount_minor ELSE -e.amount_minor END)::bigint AS allocated,
+          count(*) FILTER(WHERE e.reverses_line_id IS NULL AND NOT EXISTS(SELECT 1 FROM app.settlement_lines r WHERE r.tenant_id=e.tenant_id AND r.shop_id=e.shop_id AND r.reverses_line_id=e.id) AND NOT EXISTS(SELECT 1 FROM app.sales_lines l WHERE l.tenant_id=e.tenant_id AND l.shop_id=e.shop_id AND l.order_id=e.order_id))::int AS unmatched
+        FROM app.settlement_lines e WHERE e.shop_id=$1 GROUP BY e.tenant_id,e.shop_id,e.payout_reference
+      ) SELECT count(*)::int AS "payoutCount",count(*) FILTER(WHERE allocated=reported AND unmatched=0)::int AS "balancedPayoutCount",
+        coalesce(sum(reported),0)::text AS "reportedPayoutMinor",coalesce(sum(allocated),0)::text AS "allocatedMinor",coalesce(sum(unmatched),0)::int AS "unmatchedLineCount" FROM grouped`,[shopId]);
+    type RawOrder={orderId:string;expectedReceiptMinor:string;settledMinor:string;settlementLineCount:number};
+    const orderRows=await tx.query<RawOrder>(`WITH sales AS (
+        SELECT l.tenant_id,l.shop_id,l.order_id,sum(l.net_receipt_minor)::bigint AS receipt
+        FROM app.sales_lines l WHERE l.shop_id=$1 GROUP BY l.tenant_id,l.shop_id,l.order_id
+      ), adjustments AS (
+        SELECT e.tenant_id,e.shop_id,e.order_id,
+          sum((CASE WHEN e.event_type='refund' THEN -1 ELSE 1 END)*(CASE WHEN e.reverses_event_id IS NULL THEN 1 ELSE -1 END)*e.amount_minor)::bigint AS amount
+        FROM app.financial_events e WHERE e.shop_id=$1 GROUP BY e.tenant_id,e.shop_id,e.order_id
+      ), paid AS (
+        SELECT e.tenant_id,e.shop_id,e.order_id,sum(CASE WHEN e.reverses_line_id IS NULL THEN e.amount_minor ELSE -e.amount_minor END)::bigint AS amount,
+          count(*) FILTER(WHERE e.reverses_line_id IS NULL AND NOT EXISTS(SELECT 1 FROM app.settlement_lines r WHERE r.tenant_id=e.tenant_id AND r.shop_id=e.shop_id AND r.reverses_line_id=e.id))::int AS line_count
+        FROM app.settlement_lines e WHERE e.shop_id=$1 GROUP BY e.tenant_id,e.shop_id,e.order_id
+      ) SELECT s.order_id AS "orderId",(s.receipt+coalesce(a.amount,0))::text AS "expectedReceiptMinor",p.amount::text AS "settledMinor",p.line_count AS "settlementLineCount"
+      FROM paid p JOIN sales s ON s.tenant_id=p.tenant_id AND s.shop_id=p.shop_id AND s.order_id=p.order_id
+      LEFT JOIN adjustments a ON a.tenant_id=s.tenant_id AND a.shop_id=s.shop_id AND a.order_id=s.order_id
+      ORDER BY abs(p.amount-(s.receipt+coalesce(a.amount,0))) DESC,s.order_id LIMIT 100`,[shopId]);
+    const orders=orderRows.map(row=>{const expectedReceiptMinor=Number(row.expectedReceiptMinor),settledMinor=Number(row.settledMinor);return {...row,expectedReceiptMinor,settledMinor,differenceMinor:settledMinor-expectedReceiptMinor};});
+    const [orderSummary]=await tx.query<{reconciledOrderCount:number;unresolvedOrderCount:number}>(`WITH sales AS (
+        SELECT l.tenant_id,l.shop_id,l.order_id,sum(l.net_receipt_minor)::bigint AS receipt
+        FROM app.sales_lines l WHERE l.shop_id=$1 GROUP BY l.tenant_id,l.shop_id,l.order_id
+      ), adjustments AS (
+        SELECT e.tenant_id,e.shop_id,e.order_id,
+          sum((CASE WHEN e.event_type='refund' THEN -1 ELSE 1 END)*(CASE WHEN e.reverses_event_id IS NULL THEN 1 ELSE -1 END)*e.amount_minor)::bigint AS amount
+        FROM app.financial_events e WHERE e.shop_id=$1 GROUP BY e.tenant_id,e.shop_id,e.order_id
+      ), paid AS (
+        SELECT e.tenant_id,e.shop_id,e.order_id,sum(CASE WHEN e.reverses_line_id IS NULL THEN e.amount_minor ELSE -e.amount_minor END)::bigint AS amount
+        FROM app.settlement_lines e WHERE e.shop_id=$1 GROUP BY e.tenant_id,e.shop_id,e.order_id
+      ), compared AS (
+        SELECT p.amount-(s.receipt+coalesce(a.amount,0)) AS difference FROM paid p
+        JOIN sales s ON s.tenant_id=p.tenant_id AND s.shop_id=p.shop_id AND s.order_id=p.order_id
+        LEFT JOIN adjustments a ON a.tenant_id=s.tenant_id AND a.shop_id=s.shop_id AND a.order_id=s.order_id
+      ) SELECT count(*) FILTER(WHERE difference=0)::int AS "reconciledOrderCount",count(*) FILTER(WHERE difference<>0)::int AS "unresolvedOrderCount" FROM compared`,[shopId]);
+    type RawItem=Omit<SettlementLineItem,'settledOn'|'createdAt'>&{settledOn:string|Date;createdAt:string|Date};
+    const itemRows=await tx.query<RawItem>(`SELECT e.id,e.source_line_id AS "sourceLineId",e.payout_reference AS "payoutReference",e.order_id AS "orderId",e.settled_on AS "settledOn",e.payout_total_minor AS "payoutTotalMinor",e.amount_minor AS "amountMinor",e.note,e.created_at AS "createdAt",e.reverses_line_id AS "reversesLineId",r.id AS "reversedByLineId",
+      EXISTS(SELECT 1 FROM app.sales_lines l WHERE l.tenant_id=e.tenant_id AND l.shop_id=e.shop_id AND l.order_id=e.order_id) AS matched
+      FROM app.settlement_lines e LEFT JOIN app.settlement_lines r ON r.tenant_id=e.tenant_id AND r.shop_id=e.shop_id AND r.reverses_line_id=e.id
+      WHERE e.shop_id=$1 ORDER BY e.settled_on DESC,e.created_at DESC LIMIT 100`,[shopId]);
+    const items=itemRows.map(row=>({...row,settledOn:isoDate(row.settledOn),createdAt:new Date(row.createdAt).toISOString()}));
+    const payoutCount=payoutSummary?.payoutCount??0,balancedPayoutCount=payoutSummary?.balancedPayoutCount??0;
+    return {summary:{payoutCount,balancedPayoutCount,unresolvedPayoutCount:payoutCount-balancedPayoutCount,reportedPayoutMinor:Number(payoutSummary?.reportedPayoutMinor??0),allocatedMinor:Number(payoutSummary?.allocatedMinor??0),unmatchedLineCount:payoutSummary?.unmatchedLineCount??0,reconciledOrderCount:orderSummary?.reconciledOrderCount??0,unresolvedOrderCount:orderSummary?.unresolvedOrderCount??0},payouts,orders,items,limit:100,asOf:new Date().toISOString()};
+  });
+}
+
 export const shopExpenseTypes=['advertising','shipping','packaging','payroll','travel','other'] as const;
 export type ShopExpenseType=typeof shopExpenseTypes[number];
 export const expenseAllocationScopes=['shop_direct','shared_allocated'] as const;
