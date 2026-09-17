@@ -1,10 +1,10 @@
 import { afterAll,describe,expect,it } from 'vitest';
-import { randomUUID } from 'node:crypto';
+import { createHash,randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { buildCombinations,productFamilyInput } from '@commerce/contracts';
 import { catalog,createProductFamily,demo } from '@commerce/domain';
 import { closePools,resolveContext,withTenant } from '@commerce/db';
-import { getDraft,inspectFile,previewImport,saveDraft } from '@commerce/imports';
+import { getDraft,getImportSource,inspectFile,previewImport,saveDraft } from '@commerce/imports';
 
 const admin=new Pool({connectionString:process.env.ADMIN_DATABASE_URL});
 afterAll(async()=>{await closePools();await admin.end();});
@@ -59,8 +59,13 @@ describe('CSV inspection and saved drafts',()=>{
    const ctx=await resolveContext(demo.users.owner,demo.tenants.chino),input=source();
    const [a,b]=await Promise.all([saveDraft(ctx,input),saveDraft(ctx,input)]);expect(a.id).toBe(b.id);expect([a.duplicate,b.duplicate].sort()).toEqual([false,true]);
    const draft=await getDraft(ctx,input.shopId,a.id);expect(draft.preview.total).toBe(4);expect(draft.preview.invalid).toBe(1);
+   expect(draft.source).toMatchObject({filename:input.filename,byteSize:Buffer.byteLength(input.csv),sourceHash:createHash('sha256').update(input.csv).digest('hex'),adapterKey:'generic-order-lines',schemaVersion:'generic-order-lines-v1',storageVersion:'postgres-bytea-v1'});
+   const raw=await getImportSource(ctx,a.id);expect(raw.content.toString('utf8')).toBe(input.csv);expect(raw.byteSize).toBe(Buffer.byteLength(input.csv));
+   const stored=await withTenant(ctx,tx=>tx.query<{count:number}>('SELECT count(*)::int AS count FROM app.import_sources WHERE shop_id=$1 AND source_hash=$2',[input.shopId,draft.preview.sourceHash]));expect(stored[0].count).toBe(1);
    const audit=await withTenant(ctx,tx=>tx.query("SELECT id FROM app.audit_events WHERE action='import.draft.created' AND entity_id=$1",[a.id]));expect(audit).toHaveLength(1);
+   const downloads=await withTenant(ctx,tx=>tx.query("SELECT id FROM app.audit_events WHERE action='import.source.downloaded' AND details->>'draftId'=$1",[a.id]));expect(downloads).toHaveLength(1);
    const other=await resolveContext(demo.users.other,demo.tenants.goods);await expect(getDraft(other,demo.shops.goods,a.id)).rejects.toMatchObject({status:404});
+   await expect(getImportSource(other,a.id)).rejects.toMatchObject({status:404});
    const direct=await withTenant(other,tx=>tx.query('SELECT * FROM app.import_drafts WHERE id=$1',[a.id]));expect(direct).toEqual([]);
  });
  it('denies financial file inspection to marketing and forged shop references',async()=>{
@@ -75,5 +80,11 @@ describe('CSV inspection and saved drafts',()=>{
    await admin.query('UPDATE app.memberships SET all_shops=false WHERE tenant_id=$1 AND user_id=$2',[ctx.tenantId,ctx.userId]);
    try{await expect(getDraft(ctx,demo.shops.tiktok,draft.id)).rejects.toMatchObject({status:403});}
    finally{await admin.query('UPDATE app.memberships SET all_shops=true WHERE tenant_id=$1 AND user_id=$2',[ctx.tenantId,ctx.userId]);}
+ });
+ it('keeps raw evidence append-only and rejects unauthorized readers',async()=>{
+   const owner=await resolveContext(demo.users.owner,demo.tenants.chino),input=source(),draft=await saveDraft(owner,input);
+   await expect(withTenant(owner,tx=>tx.query('UPDATE app.import_sources SET filename=$1 WHERE source_hash=$2',['changed.csv',draft.source.sourceHash]))).rejects.toMatchObject({code:'42501'});
+   await expect(withTenant(owner,tx=>tx.query('DELETE FROM app.import_sources WHERE source_hash=$1',[draft.source.sourceHash]))).rejects.toMatchObject({code:'42501'});
+   const marketing=await resolveContext(demo.users.marketing,demo.tenants.chino);await expect(getImportSource(marketing,draft.id)).rejects.toMatchObject({status:403});
  });
 });

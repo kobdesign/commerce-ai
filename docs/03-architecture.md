@@ -49,7 +49,7 @@ Catalog กลางไม่ผูกกับเสื้อผ้า ProductV
 
 - การ reconcile statement/payout กับออเดอร์แยกจากการคำนวณกำไร
 - Financial events ใช้บันทึกเพิ่ม/ปรับปรุงที่มีประวัติ ไม่อ้างว่าเป็นบัญชีแยกประเภทตามกฎหมาย
-- Raw source มี lineage, checksum, adapter version และ import time; เก็บตาม retention policy
+- Raw source มี lineage, checksum, adapter version และ import time; v1.1 เก็บ CSV ไม่เกิน 1 MB แบบ immutable ใน PostgreSQL สำหรับ local/staging ก่อนย้าย content ไป private object storage และกำหนด retention ก่อนรับข้อมูลจริง
 - มี event/effective date, source update time, currency, timezone และ sign convention
 - เก็บ amount เป็น decimal ที่กำหนด scale หรือ minor units ตามสกุลเงิน ไม่ใช้ floating point
 - แยก actual fees, allocated ads, estimated costs และ missing inputs อย่างชัดเจน
