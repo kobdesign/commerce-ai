@@ -1,5 +1,6 @@
 import { test,expect,type Page } from '@playwright/test';
 import { demo } from '../../packages/domain/src/demo';
+const soldOn=new Date().toISOString().slice(0,10);
 
 async function signIn(page:Page){
   await page.goto('/login');await page.getByLabel('อีเมล',{exact:true}).fill('owner@chino.demo');await page.getByLabel('รหัสผ่าน',{exact:true}).fill(demo.password);await page.getByRole('button',{name:'เข้าสู่พื้นที่ทำงาน'}).click();await expect(page.getByRole('heading',{name:'ภาพรวม',exact:true})).toBeVisible();await page.getByLabel('เลือกร้านค้า',{exact:true}).selectOption(demo.shops.tiktok);
@@ -8,7 +9,7 @@ async function signIn(page:Page){
 test('confirms a reviewed CSV once and traces contribution back to its source draft',async({page})=>{
   await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
   const stamp=Date.now(),order=`ZZZ-${stamp}-FIN`,filename=`financial-${stamp}.csv`;
-  const csv=`order_id,sku,quantity,date,net_receipt,platform_fee\n${order},CH-L-BK-32,1,2026-09-16,319.00,80.00\n`;
+  const csv=`order_id,sku,quantity,date,net_receipt,platform_fee\n${order},CH-L-BK-32,1,${soldOn},319.00,80.00\n`;
   await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:filename,mimeType:'text/csv',buffer:Buffer.from(csv)});
   await expect(page.getByRole('heading',{name:'จับคู่คอลัมน์',exact:true})).toBeVisible();
   await expect(page.locator('details.import-history')).not.toHaveAttribute('open','');
@@ -28,7 +29,7 @@ test('confirms a reviewed CSV once and traces contribution back to its source dr
 test('maps a source line ID and blocks the same marketplace line in a later file',async({page})=>{
   await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
   const stamp=Date.now(),sourceLineId=`SOURCE-E2E-${stamp}`;
-  const csv=(order:string)=>`order_id,source_line_id,sku,quantity,date,net_receipt,platform_fee\n${order},${sourceLineId},CH-L-BK-32,1,2026-09-16,319.00,80.00\n`;
+  const csv=(order:string)=>`order_id,source_line_id,sku,quantity,date,net_receipt,platform_fee\n${order},${sourceLineId},CH-L-BK-32,1,${soldOn},319.00,80.00\n`;
   await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:`source-first-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(csv(`SOURCE-ORDER-A-${stamp}`))});
   await expect(page.getByLabel('คอลัมน์ รหัสรายการต้นทาง · แนะนำ',{exact:true})).toHaveValue('source_line_id');
   await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();await expect(page.getByText(`ต้นทาง ${sourceLineId}`,{exact:true})).toBeVisible();
@@ -46,7 +47,7 @@ test('maps a source line ID and blocks the same marketplace line in a later file
 test('records and reverses a partial refund without rewriting the sale',async({page})=>{
   await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
   const stamp=Date.now(),order=`ZZZ-${stamp}-REFUND`,sourceEventId=`REFUND-EVENT-${stamp}`;
-  const csv=`order_id,source_line_id,sku,quantity,date,net_receipt,platform_fee\n${order},REFUND-LINE-${stamp},CH-L-BK-32,1,2026-09-16,319.00,80.00\n`;
+  const csv=`order_id,source_line_id,sku,quantity,date,net_receipt,platform_fee\n${order},REFUND-LINE-${stamp},CH-L-BK-32,1,${soldOn},319.00,80.00\n`;
   await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:`refund-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(csv)});
   await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();await page.getByRole('button',{name:'บันทึกร่างเพื่อตรวจ',exact:true}).click();
   await page.getByRole('checkbox',{name:/ฉันตรวจแล้ว/}).check();await page.getByRole('button',{name:'ยืนยันนำเข้าข้อมูล',exact:true}).click();await expect(page.getByRole('status')).toContainText('นำเข้า 1 รายการแล้ว');
@@ -89,7 +90,7 @@ test('records and reverses an allocated shop expense and shows its effect separa
 test('confirms a missing cost from the review inbox without changing the imported line',async({page})=>{
   await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
   const stamp=Date.now(),order=`ZZZ-${stamp}-REVIEW`,filename=`review-${stamp}.csv`;
-  const csv=`order_id,sku,quantity,date,net_receipt\n${order},CH-L-NV-34,1,2026-09-16,500.00\n`;
+  const csv=`order_id,sku,quantity,date,net_receipt\n${order},CH-L-NV-34,1,${soldOn},500.00\n`;
   await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:filename,mimeType:'text/csv',buffer:Buffer.from(csv)});
   await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();await expect(page.getByText(order,{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'บันทึกร่างเพื่อตรวจ',exact:true}).click();await page.getByRole('checkbox',{name:/ฉันตรวจแล้ว/}).check();await page.getByRole('button',{name:'ยืนยันนำเข้าข้อมูล',exact:true}).click();
