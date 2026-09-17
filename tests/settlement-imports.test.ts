@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { afterAll,describe,expect,it } from 'vitest';
 import { closePools,resolveContext,withTenant } from '@commerce/db';
 import { createProductFamily,demo } from '@commerce/domain';
 import { commitDraft,saveDraft } from '@commerce/imports';
-import { commitSettlementImport,getSettlementImportSource,inspectSettlementFile,previewSettlementImport,settlementImportBatches,settlements } from '@commerce/finance';
+import { commitMarketplaceSettlement,commitSettlementImport,getSettlementImportSource,inspectMarketplaceSettlement,inspectSettlementFile,previewSettlementImport,settlementImportBatches,settlements } from '@commerce/finance';
 
 afterAll(closePools);
 const today=new Date().toISOString().slice(0,10);
@@ -69,5 +70,47 @@ describe('Settlement CSV imports',()=>{
     await expect(getSettlementImportSource(other,saved.id)).rejects.toMatchObject({status:404});
     await expect(withTenant(ctx,tx=>tx.query('UPDATE app.settlement_import_batches SET filename=$1 WHERE id=$2',['changed.csv',saved.id]))).rejects.toMatchObject({code:'42501'});
     await expect(withTenant(ctx,tx=>tx.query('DELETE FROM app.settlement_import_batches WHERE id=$1',[saved.id]))).rejects.toMatchObject({code:'42501'});
+  });
+
+  it('detects and commits TikTok Shop, Shopee and Lazada CSV statements without manual mapping',async()=>{
+    const fixtures=[
+      {key:'tiktok-shop-th',file:'apps/web/public/examples/tiktok-settlement-synthetic.csv',orders:['TT-ORDER-10001','TT-ORDER-10002']},
+      {key:'shopee-th',file:'apps/web/public/examples/shopee-income-synthetic.csv',orders:['SP-ORDER-10001','SP-ORDER-10002']},
+      {key:'lazada-th',file:'apps/web/public/examples/lazada-statement-synthetic.csv',orders:['LZ-ORDER-10001','LZ-ORDER-10002']},
+    ] as const;
+    for(const fixture of fixtures){
+      const {ctx,orders}=await sales(),template=await readFile(fixture.file,'utf8');
+      const csv=template.replace(fixture.orders[0],orders[0]).replace(fixture.orders[1],orders[1]);
+      const input={shopId:demo.shops.tiktok,filename:fixture.file.split('/').at(-1)!,contentType:'text/csv' as const,delimiter:',' as const,contentBase64:Buffer.from(csv).toString('base64')};
+      const inspection=await inspectMarketplaceSettlement(ctx,input);expect(inspection.detected).toBe(true);
+      if(!inspection.detected)throw new Error('adapter not detected');
+      expect(inspection.preview).toMatchObject({adapterKey:fixture.key,total:2,valid:2,invalid:0,payoutCount:1,balancedPayoutCount:1,unmatchedLineCount:0});
+      const saved=await commitMarketplaceSettlement(ctx,{...input,adapterKey:fixture.key,confirmedStatement:true});
+      expect(saved).toMatchObject({duplicate:false,lines:2,payouts:1,unmatchedLines:0});
+      await expect(commitMarketplaceSettlement(ctx,{...input,adapterKey:fixture.key,confirmedStatement:true})).resolves.toMatchObject({id:saved.id,duplicate:true});
+      const source=await getSettlementImportSource(ctx,saved.id);expect(source.content.equals(Buffer.from(csv))).toBe(true);expect(source.contentType).toBe('text/csv');
+    }
+  });
+
+  it('reads the TikTok multi-sheet XLSX, selects Order details and preserves the exact workbook',async()=>{
+    const ctx=await resolveContext(demo.users.owner,demo.tenants.chino),content=await readFile('tests/fixtures/tiktok-settlement-synthetic.xlsx');
+    const input={shopId:demo.shops.tiktok,filename:'tiktok-settlement-synthetic.xlsx',contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' as const,contentBase64:content.toString('base64')};
+    const inspection=await inspectMarketplaceSettlement(ctx,input);expect(inspection.detected).toBe(true);
+    if(!inspection.detected)throw new Error('adapter not detected');
+    expect(inspection.preview).toMatchObject({adapterKey:'tiktok-shop-th',sourceSheet:'Order details',total:2,valid:2,invalid:0,unmatchedLineCount:2});
+    const saved=await commitMarketplaceSettlement(ctx,{...input,adapterKey:'tiktok-shop-th',confirmedStatement:true});
+    const source=await getSettlementImportSource(ctx,saved.id);expect(source.content.equals(content)).toBe(true);expect(source.contentType).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  });
+
+  it('falls back for unknown CSV headers and blocks negative marketplace adjustments',async()=>{
+    const ctx=await resolveContext(demo.users.owner,demo.tenants.chino),generic='payout_reference,settled_on,payout_total,source_line_id,order_id,allocation_amount\nP-1,2026-09-17,10.00,L-1,O-1,10.00\n';
+    await expect(inspectMarketplaceSettlement(ctx,{shopId:demo.shops.tiktok,filename:'generic.csv',contentType:'text/csv',delimiter:',',contentBase64:Buffer.from(generic).toString('base64')})).resolves.toMatchObject({detected:false,total:1});
+    const negative='Payout ID,Order ID,Release Date,Total Released Amount,Transaction ID,Released Amount,Description\nSP-NEG,ORDER-NEG,2026-09-17,-10.00,SP-NEG-TXN,-10.00,Adjustment\n';
+    const input={shopId:demo.shops.tiktok,filename:'shopee-negative.csv',contentType:'text/csv' as const,delimiter:',' as const,contentBase64:Buffer.from(negative).toString('base64')};
+    const inspection=await inspectMarketplaceSettlement(ctx,input);expect(inspection.detected).toBe(true);
+    if(!inspection.detected)throw new Error('adapter not detected');
+    expect(inspection.preview.rows[0].errors).toContain('รายการยอดติดลบหรือศูนย์ต้องแยกเป็นค่าธรรมเนียมหรือรายการปรับยอดก่อนนำเข้า');
+    await expect(commitMarketplaceSettlement(ctx,{...input,adapterKey:'shopee-th',confirmedStatement:true})).rejects.toMatchObject({code:'SETTLEMENT_IMPORT_HAS_ERRORS'});
+    const auditor=await resolveContext(demo.users.consultant,demo.tenants.chino);await expect(inspectMarketplaceSettlement(auditor,input)).rejects.toMatchObject({status:403});
   });
 });
