@@ -11,6 +11,8 @@ try {
     const password = decodeURIComponent(url.password).replaceAll("'", "''");
     if (!(await client.query('SELECT 1 FROM pg_roles WHERE rolname=$1',[name])).rowCount) {
       await client.query(`CREATE ROLE ${name} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD '${password}'`);
+    } else {
+      await client.query(`ALTER ROLE ${name} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD '${password}'`);
     }
   }
   await client.query('CREATE TABLE IF NOT EXISTS public.schema_migrations(name text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz DEFAULT now())');

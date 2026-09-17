@@ -5,7 +5,8 @@ import { login,logout,organizations,shops,createOrganization } from '@commerce/d
 import { resolveContext } from '@commerce/db';
 import { AppError } from '@commerce/contracts';
 import { requireUser } from '../lib/server';
-const options={httpOnly:true,sameSite:'lax' as const,secure:process.env.APP_ORIGIN?.startsWith('https:')??false,path:'/',maxAge:28800};
+import { secureCookies } from '../lib/environment';
+const options={httpOnly:true,sameSite:'lax' as const,secure:secureCookies(),path:'/',maxAge:28800};
 export async function signIn(data:FormData){
   let token:string;
   try{token=await login(String(data.get('email')??''),String(data.get('password')??''));}

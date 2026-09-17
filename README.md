@@ -2,9 +2,11 @@
 
 ชื่อชั่วคราวสำหรับโครงการช่วยร้านค้าออนไลน์ตรวจเงินรับและกำไร มี AI ในกระบวนการทำงาน รองรับหลายองค์กร และมีเส้นทางขยายสู่ Enterprise
 
-สถานะ: **Product workflow v0.8 — เว็บแอปและ PostgreSQL สำหรับทดลองในเครื่อง**
+สถานะ: **Product workflow v0.9 — เว็บแอปและ PostgreSQL พร้อมเตรียม staging บน Render**
 
-มี login, หลายบริษัท/ร้าน, catalog หลายประเภทสินค้า, รายละเอียดที่เพิ่มเองได้, หลาย SKU ต่อสินค้า, แก้ไขรายละเอียด/ราคา/ต้นทุนพร้อมประวัติ, สิทธิ์รายบทบาท/ร้าน, audit, AI tool preview, flow ตรวจ/ยืนยันรายการขาย, source line identity ป้องกันยอดซ้ำข้ามไฟล์, Review Inbox สำหรับยืนยันต้นทุนที่ขาด และ refund/fee rebate แบบ append-only พร้อม unmatched queue และการแก้กลับโดยไม่ลบหลักฐานแล้ว ข้อมูลเริ่มต้นเป็นข้อมูลสมมติ ยังไม่ใช่กำไรสุทธิหรือระบบ production/Enterprise ที่ตรวจรับแล้ว
+มี login, หลายบริษัท/ร้าน, catalog หลายประเภทสินค้า, รายละเอียดที่เพิ่มเองได้, หลาย SKU ต่อสินค้า, แก้ไขรายละเอียด/ราคา/ต้นทุนพร้อมประวัติ, สิทธิ์รายบทบาท/ร้าน, audit, AI tool preview, flow ตรวจ/ยืนยันรายการขาย, source line identity ป้องกันยอดซ้ำข้ามไฟล์, Review Inbox สำหรับยืนยันต้นทุนที่ขาด และ refund/fee rebate แบบ append-only พร้อม unmatched queue และการแก้กลับโดยไม่ลบหลักฐานแล้ว ข้อมูลเริ่มต้นเป็นข้อมูลสมมติ ยังไม่ใช่กำไรสุทธิหรือระบบ production/Enterprise ที่ตรวจรับแล้ว การสร้างทรัพยากร Render จริงต้องตรวจราคาและยืนยันใน Render Dashboard ก่อน
+
+โครงสร้างและคู่มือ staging บน Render: [Render staging readiness](docs/21-render-staging.md)
 
 การแก้กลับรายการการเงินที่บันทึกผิด: [Product workflow v0.8](docs/20-financial-event-reversals.md)
 
@@ -39,7 +41,7 @@ npm run dev
 
 คู่มือคำสั่ง บัญชีทดสอบ ขอบเขตฟีเจอร์และข้อจำกัด: [Foundation runbook](docs/10-foundation-runbook.md)
 
-ผลตรวจล่าสุด: **53 integration tests และ 16 browser tests ผ่าน** ดู [ผลตรวจ v0.8](docs/20-financial-event-reversals.md), [ผลตรวจ v0.7](docs/19-financial-events.md) หรือ [Business Logic verification](docs/15-business-logic-verification.md)
+ผลตรวจล่าสุด: **55 integration tests และ 17 browser tests ผ่าน** รวม health check สำหรับ staging ดู [Render staging readiness](docs/21-render-staging.md), [ผลตรวจ v0.8](docs/20-financial-event-reversals.md) หรือ [Business Logic verification](docs/15-business-logic-verification.md)
 
 เอกสารอ้างอิงบทสนทนาของผู้ใช้ ข้อมูลร้านจริงและเทคโนโลยีที่ทีมถนัดยังรอยืนยัน ตัวอย่างทั้งหมดที่ติดป้าย synthetic ไม่ใช่ข้อมูลร้านหรือรูปแบบไฟล์ทางการของแพลตฟอร์ม
 

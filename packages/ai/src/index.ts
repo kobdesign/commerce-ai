@@ -7,7 +7,7 @@ import { aiInput,AppError,type Context } from '@commerce/contracts';
 export function aiConfiguration(){return {enabled:process.env.AI_ENABLED==='true'&&!!process.env.AI_GATEWAY_API_KEY&&!!process.env.AI_MODEL,model:process.env.AI_MODEL??null};}
 export async function catalogEvidence(ctx:Context,shopId:string){
   const {items,limit}=await catalog(ctx,shopId);
-  return {scope:'catalog-only',asOf:new Date().toISOString(),isSynthetic:process.env.APP_MODE==='local-demo',
+  return {scope:'catalog-only',asOf:new Date().toISOString(),isSynthetic:['local-demo','staging-demo'].includes(process.env.APP_MODE??''),
     listedSkuCount:items.length,truncated:items.length===limit,categories:[...new Set(items.map(i=>i.category))],
     examples:items.slice(0,12).map(i=>({name:i.name,sku:i.sku,category:i.category,attributes:i.attributes,evidenceRef:`variant:${i.id}`})),
     limitations:['ไม่มีข้อมูลยอดขายหรือกำไรใน workflow นี้','ข้อมูลตัวอย่างสำหรับทดสอบระบบ']};

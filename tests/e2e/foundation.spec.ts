@@ -3,6 +3,9 @@ import { demo } from '../../packages/domain/src/demo';
 async function signIn(page:Page,email='owner@chino.demo'){
  await page.goto('/login');await page.getByLabel('อีเมล',{exact:true}).fill(email);await page.getByLabel('รหัสผ่าน',{exact:true}).fill(demo.password);await page.getByRole('button',{name:'เข้าสู่พื้นที่ทำงาน'}).click();await expect(page.getByRole('heading',{name:'ภาพรวม',exact:true})).toBeVisible();
 }
+test('health endpoint verifies the application database without requiring a session',async({request})=>{
+ const response=await request.get('/api/health');expect(response.status()).toBe(200);expect(await response.json()).toEqual({status:'ok'});expect(response.headers()['cache-control']).toContain('no-store');
+});
 test('owner can browse, search, add a non-clothing product, and inspect tool evidence',async({page})=>{
  await signIn(page);await page.getByLabel('เลือกร้านค้า',{exact:true}).selectOption(demo.shops.tiktok);await page.getByRole('link',{name:'สินค้า',exact:true}).click();
  await expect(page.getByRole('heading',{name:'สินค้า',exact:true})).toBeVisible();

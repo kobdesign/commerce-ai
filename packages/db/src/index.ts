@@ -8,7 +8,7 @@ export function pool(){
   return globalDb.commercePool ??=new Pool({connectionString:process.env.DATABASE_URL,max:8,connectionTimeoutMillis:5000});
 }
 export function identityPool(){
-  if(process.env.APP_MODE!=='local-demo') throw new Error('Only local-demo identity is implemented. Configure an audited production identity adapter before deploying.');
+  if(!['local-demo','staging-demo'].includes(process.env.APP_MODE??'')) throw new Error('Demo identity is disabled. Configure an audited production identity adapter before deploying.');
   if(!process.env.IDENTITY_DATABASE_URL) throw new Error('IDENTITY_DATABASE_URL is required.');
   return globalDb.identityPool ??=new Pool({connectionString:process.env.IDENTITY_DATABASE_URL,max:3,connectionTimeoutMillis:5000});
 }

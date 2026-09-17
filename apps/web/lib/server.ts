@@ -6,6 +6,7 @@ import { sessionUser,organizations,shops } from '@commerce/domain';
 import { resolveContext } from '@commerce/db';
 import { AppError,uuid } from '@commerce/contracts';
 import { cache } from 'react';
+import { applicationOrigin } from './environment';
 export async function user(){return sessionUser((await cookies()).get('commerce_session')?.value);}
 export async function requireUser(){const u=await user();if(!u)throw new AppError(401,'UNAUTHENTICATED','กรุณาเข้าสู่ระบบ');return u;}
 export async function apiContext(tenantId:string){uuid.parse(tenantId);const u=await requireUser();return resolveContext(u.id,tenantId);}
@@ -19,8 +20,8 @@ export const workspace=cache(async function workspace(){
   return {user:u,org,orgs,ctx,shops:allowedShops,shop};
 });
 export function checkOrigin(req:Request){
-  const configured=process.env.APP_ORIGIN;
-  if(!configured||req.headers.get('origin')!==new URL(configured).origin)throw new AppError(403,'ORIGIN_REJECTED','คำขอนี้ไม่ได้มาจากแอปที่อนุญาต');
+  const configured=applicationOrigin();
+  if(!configured||req.headers.get('origin')!==configured)throw new AppError(403,'ORIGIN_REJECTED','คำขอนี้ไม่ได้มาจากแอปที่อนุญาต');
 }
 export async function jsonInput(req:Request,maxBytes=32768){
   checkOrigin(req);
