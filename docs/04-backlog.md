@@ -1,10 +1,10 @@
 # Backlog และลำดับพัฒนา
 
-สถานะ ณ 2026-09-17: มี **local foundation, generic order-line, raw source evidence, durable import worker, financial-event, settlement reconciliation และ shop-expense vertical slice** แล้ว ดู [ผลส่งมอบ v1.3](26-settlement-reconciliation.md) FND-01/02/03, CAT-01, AI-01, IMP-01/02/03/04 และ QA-01 เริ่มมีโค้ดและการทดสอบ รวม checksum/source storage, source line deduplication, background commit/retry, refund/fee rebate/unmatched/reversal, statement allocation และค่าใช้จ่ายระดับร้าน ส่วน production acceptance ยังขาด private object storage และ retention policy, marketplace adapters, bank feed, ad statement import, identity provider, backup/restore และ live model evaluation
+สถานะ ณ 2026-09-17: มี **local foundation, generic order-line, raw source evidence, durable import worker, financial-event, settlement CSV/reconciliation และ shop-expense vertical slice** แล้ว ดู [ผลส่งมอบ v1.4](27-settlement-csv-import.md) FND-01/02/03, CAT-01, AI-01, IMP-01/02/03/04 และ QA-01 เริ่มมีโค้ดและการทดสอบ รวม checksum/source storage, source line deduplication, background commit/retry, refund/fee rebate/unmatched/reversal, statement mapping/preview/atomic commit และค่าใช้จ่ายระดับร้าน ส่วน production acceptance ยังขาด private object storage และ retention policy, marketplace-specific adapters, bank feed, ad statement import, identity provider, backup/restore และ live model evaluation
 
 ## ลำดับ dependency
 
-อัปเดต v1.3: generic CSV รองรับ raw source evidence, mapping/review และ commit แบบ background + idempotent, สถานะ/auto retry/replay, source line deduplication ข้ามไฟล์, snapshot ต้นทุน, refund/fee rebate, statement payout reconciliation และบัญชีค่าใช้จ่ายแบบ append-only, unmatched queue, summary/evidence และ RLS แล้ว ยังไม่ใช่ private object storage, marketplace adapter, bank reconciliation หรือ financial acceptance ครบชุด ดู [ผลส่งมอบ](26-settlement-reconciliation.md)
+อัปเดต v1.4: generic CSV รองรับ order และ settlement mapping/review, raw source evidence, atomic/idempotent commit, source line deduplication ข้ามไฟล์, snapshot ต้นทุน, refund/fee rebate, payout reconciliation และบัญชีค่าใช้จ่ายแบบ append-only, unmatched queue, summary/evidence และ RLS แล้ว ยังไม่ใช่ private object storage, marketplace-specific adapter, bank reconciliation หรือ financial acceptance ครบชุด ดู [ผลส่งมอบ](27-settlement-csv-import.md)
 
 Discovery → Foundations → Import → Reconciliation & Metrics → AI Analysis → Pilot
 

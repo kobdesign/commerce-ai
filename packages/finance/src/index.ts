@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AppError,uuid,type Context } from '@commerce/contracts';
 import { withTenant } from '@commerce/db';
 import { assertShop,audit } from '@commerce/domain';
+export * from './settlement-imports';
 
 export const financialEventTypes=['refund','fee_rebate'] as const;
 export type FinancialEventType=typeof financialEventTypes[number];
@@ -150,7 +151,7 @@ function settlementAccess(role:string,write=true){
 
 export type SettlementLineItem={
   id:string;sourceLineId:string;payoutReference:string;orderId:string;settledOn:string;payoutTotalMinor:number;
-  amountMinor:number;note:string;createdAt:string;matched:boolean;reversesLineId:string|null;reversedByLineId:string|null;
+  amountMinor:number;note:string;createdAt:string;matched:boolean;reversesLineId:string|null;reversedByLineId:string|null;importBatchId:string|null;sourceRecord:number|null;
 };
 export type SettlementPayout={payoutReference:string;settledOn:string;payoutTotalMinor:number;allocatedMinor:number;differenceMinor:number;activeLineCount:number;unmatchedLineCount:number};
 export type SettlementOrder={orderId:string;expectedReceiptMinor:number;settledMinor:number;differenceMinor:number;settlementLineCount:number};
@@ -161,6 +162,7 @@ export async function recordSettlementLine(ctx:Context,input:unknown){
   const d=settlementInput.parse(input);
   return withTenant(ctx,async(tx,role)=>{
     settlementAccess(role);await assertShop(tx,ctx,d.shopId);
+    await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${ctx.tenantId}:${d.shopId}:settlement-write`]);
     await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${ctx.tenantId}:${d.shopId}:settlement-source:${d.sourceLineId}`]);
     await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${ctx.tenantId}:${d.shopId}:payout:${d.payoutReference}`]);
     const [existing]=await tx.query<{id:string;payoutReference:string;orderId:string;settledOn:string|Date;payoutTotalMinor:number;amountMinor:number;note:string}>(`SELECT id,payout_reference AS "payoutReference",order_id AS "orderId",settled_on AS "settledOn",payout_total_minor AS "payoutTotalMinor",amount_minor AS "amountMinor",note
@@ -186,6 +188,7 @@ export async function reverseSettlementLine(ctx:Context,lineId:string,input:unkn
   const id=uuid.parse(lineId),d=settlementReversalInput.parse(input);
   return withTenant(ctx,async(tx,role)=>{
     settlementAccess(role);await assertShop(tx,ctx,d.shopId);
+    await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${ctx.tenantId}:${d.shopId}:settlement-write`]);
     await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${ctx.tenantId}:${d.shopId}:settlement-reversal:${id}`]);
     const [original]=await tx.query<{sourceLineId:string;payoutReference:string;orderId:string;settledOn:string|Date;payoutTotalMinor:number;amountMinor:number;reversesLineId:string|null;reversedByLineId:string|null}>(`SELECT e.source_line_id AS "sourceLineId",e.payout_reference AS "payoutReference",e.order_id AS "orderId",e.settled_on AS "settledOn",e.payout_total_minor AS "payoutTotalMinor",e.amount_minor AS "amountMinor",e.reverses_line_id AS "reversesLineId",r.id AS "reversedByLineId"
       FROM app.settlement_lines e LEFT JOIN app.settlement_lines r ON r.tenant_id=e.tenant_id AND r.shop_id=e.shop_id AND r.reverses_line_id=e.id
@@ -252,7 +255,7 @@ export async function settlements(ctx:Context,shopId:string):Promise<SettlementL
         LEFT JOIN adjustments a ON a.tenant_id=s.tenant_id AND a.shop_id=s.shop_id AND a.order_id=s.order_id
       ) SELECT count(*) FILTER(WHERE difference=0)::int AS "reconciledOrderCount",count(*) FILTER(WHERE difference<>0)::int AS "unresolvedOrderCount" FROM compared`,[shopId]);
     type RawItem=Omit<SettlementLineItem,'settledOn'|'createdAt'>&{settledOn:string|Date;createdAt:string|Date};
-    const itemRows=await tx.query<RawItem>(`SELECT e.id,e.source_line_id AS "sourceLineId",e.payout_reference AS "payoutReference",e.order_id AS "orderId",e.settled_on AS "settledOn",e.payout_total_minor AS "payoutTotalMinor",e.amount_minor AS "amountMinor",e.note,e.created_at AS "createdAt",e.reverses_line_id AS "reversesLineId",r.id AS "reversedByLineId",
+    const itemRows=await tx.query<RawItem>(`SELECT e.id,e.source_line_id AS "sourceLineId",e.payout_reference AS "payoutReference",e.order_id AS "orderId",e.settled_on AS "settledOn",e.payout_total_minor AS "payoutTotalMinor",e.amount_minor AS "amountMinor",e.note,e.created_at AS "createdAt",e.reverses_line_id AS "reversesLineId",r.id AS "reversedByLineId",e.import_batch_id AS "importBatchId",e.source_record AS "sourceRecord",
       EXISTS(SELECT 1 FROM app.sales_lines l WHERE l.tenant_id=e.tenant_id AND l.shop_id=e.shop_id AND l.order_id=e.order_id) AS matched
       FROM app.settlement_lines e LEFT JOIN app.settlement_lines r ON r.tenant_id=e.tenant_id AND r.shop_id=e.shop_id AND r.reverses_line_id=e.id
       WHERE e.shop_id=$1 ORDER BY e.settled_on DESC,e.created_at DESC LIMIT 100`,[shopId]);
