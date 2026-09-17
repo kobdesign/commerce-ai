@@ -126,3 +126,114 @@ export function applyFinancialEvents(netReceiptMinor:number,cogsMinor:number|nul
   const adjustedReceiptMinor=netReceiptMinor-refundMinor+feeRebateMinor;
   return {adjustedReceiptMinor,adjustedContributionMinor:cogsMinor===null?null:adjustedReceiptMinor-cogsMinor};
 }
+
+export const shopExpenseTypes=['advertising','shipping','packaging','payroll','travel','other'] as const;
+export type ShopExpenseType=typeof shopExpenseTypes[number];
+export const expenseAllocationScopes=['shop_direct','shared_allocated'] as const;
+export type ExpenseAllocationScope=typeof expenseAllocationScopes[number];
+
+const expenseInput=z.object({
+  shopId:uuid,
+  sourceExpenseId:z.string().trim().min(1).max(150),
+  expenseType:z.enum(shopExpenseTypes),
+  occurredOn:z.string().refine(value=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value,'วันที่ไม่ถูกต้อง'),
+  amountMinor:z.number().int().min(1).max(1_000_000_000),
+  allocationScope:z.enum(expenseAllocationScopes),
+  allocationBasis:z.string().trim().min(3).max(300).nullable(),
+  note:z.string().trim().min(3).max(500),
+  confirmedOutsideImportedReceipt:z.literal(true),
+}).strict().superRefine((value,ctx)=>{
+  if(value.allocationScope==='shared_allocated'&&!value.allocationBasis)ctx.addIssue({code:'custom',path:['allocationBasis'],message:'กรุณาระบุวิธีแบ่งค่าใช้จ่ายส่วนกลางให้ร้านนี้'});
+  if(value.allocationScope==='shop_direct'&&value.allocationBasis!==null)ctx.addIssue({code:'custom',path:['allocationBasis'],message:'ค่าใช้จ่ายของร้านโดยตรงไม่ต้องระบุวิธีแบ่ง'});
+});
+const expenseReversalInput=z.object({
+  shopId:uuid,
+  occurredOn:z.string().refine(value=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value,'วันที่ไม่ถูกต้อง'),
+  note:z.string().trim().min(3).max(500),
+  confirmedCorrection:z.literal(true),
+}).strict();
+
+function expenseAccess(role:string,write=true){
+  if(!(write?['owner','finance']:['owner','finance','auditor']).includes(role))throw new AppError(403,'FORBIDDEN','คุณไม่มีสิทธิ์จัดการค่าใช้จ่ายของร้าน');
+}
+
+export type ShopExpenseItem={
+  id:string;sourceExpenseId:string;expenseType:ShopExpenseType;occurredOn:string;amountMinor:number;
+  allocationScope:ExpenseAllocationScope;allocationBasis:string|null;note:string;createdAt:string;
+  reversesExpenseId:string|null;reversedByExpenseId:string|null;
+};
+export type ShopExpenseCategoryTotal={expenseType:ShopExpenseType;amountMinor:number};
+export type ShopExpenseSummary={entryCount:number;activeExpenseCount:number;reversedExpenseCount:number;activeAmountMinor:number};
+export type ShopExpenseLedger={summary:ShopExpenseSummary;categoryTotals:ShopExpenseCategoryTotal[];items:ShopExpenseItem[];limit:number;asOf:string};
+
+export async function recordShopExpense(ctx:Context,input:unknown){
+  const d=expenseInput.parse(input);
+  return withTenant(ctx,async(tx,role)=>{
+    expenseAccess(role);await assertShop(tx,ctx,d.shopId);
+    await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${ctx.tenantId}:${d.shopId}:expense:${d.sourceExpenseId}`]);
+    const [existing]=await tx.query<{id:string;expenseType:ShopExpenseType;occurredOn:string|Date;amountMinor:number;allocationScope:ExpenseAllocationScope;allocationBasis:string|null;note:string}>(`SELECT id,expense_type AS "expenseType",occurred_on AS "occurredOn",amount_minor AS "amountMinor",allocation_scope AS "allocationScope",allocation_basis AS "allocationBasis",note
+      FROM app.shop_expenses WHERE shop_id=$1 AND source_expense_id=$2`,[d.shopId,d.sourceExpenseId]);
+    if(existing){
+      const same=existing.expenseType===d.expenseType&&isoDate(existing.occurredOn)===d.occurredOn&&existing.amountMinor===d.amountMinor&&existing.allocationScope===d.allocationScope&&existing.allocationBasis===d.allocationBasis&&existing.note===d.note;
+      if(!same)throw new AppError(409,'EXPENSE_ID_CONFLICT','รหัสอ้างอิงนี้มีข้อมูลต่างจากรายการเดิม กรุณาตรวจเอกสารต้นทาง');
+      return {id:existing.id,duplicate:true};
+    }
+    const id=randomUUID();
+    await tx.query(`INSERT INTO app.shop_expenses(tenant_id,id,shop_id,source_expense_id,expense_type,occurred_on,amount_minor,allocation_scope,allocation_basis,source_scope,note,actor_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'outside_imported_net_receipt',$10,$11)`,[ctx.tenantId,id,d.shopId,d.sourceExpenseId,d.expenseType,d.occurredOn,d.amountMinor,d.allocationScope,d.allocationBasis,d.note,ctx.userId]);
+    await audit(tx,ctx,'shop_expense.recorded',id,{shopId:d.shopId,sourceExpenseId:d.sourceExpenseId,expenseType:d.expenseType,amountMinor:d.amountMinor,allocationScope:d.allocationScope,allocationBasis:d.allocationBasis,sourceScope:'outside_imported_net_receipt'});
+    return {id,duplicate:false};
+  });
+}
+
+export async function reverseShopExpense(ctx:Context,expenseId:string,input:unknown){
+  const id=uuid.parse(expenseId),d=expenseReversalInput.parse(input);
+  return withTenant(ctx,async(tx,role)=>{
+    expenseAccess(role);await assertShop(tx,ctx,d.shopId);
+    const sourceExpenseId=`REV-${id}`;
+    await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${ctx.tenantId}:${d.shopId}:expense-reversal:${id}`]);
+    await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${ctx.tenantId}:${d.shopId}:expense:${sourceExpenseId}`]);
+    const [existing]=await tx.query<{id:string;reversesExpenseId:string|null;occurredOn:string|Date;note:string}>(`SELECT id,reverses_expense_id AS "reversesExpenseId",occurred_on AS "occurredOn",note
+      FROM app.shop_expenses WHERE shop_id=$1 AND source_expense_id=$2`,[d.shopId,sourceExpenseId]);
+    if(existing){
+      const same=existing.reversesExpenseId===id&&isoDate(existing.occurredOn)===d.occurredOn&&existing.note===d.note;
+      if(!same)throw new AppError(409,'EXPENSE_ID_CONFLICT','รหัสรายการแก้กลับนี้มีข้อมูลต่างจากรายการเดิม');
+      return {id:existing.id,sourceExpenseId,duplicate:true,reversedExpenseId:id};
+    }
+    const [original]=await tx.query<{expenseType:ShopExpenseType;amountMinor:number;allocationScope:ExpenseAllocationScope;allocationBasis:string|null;reversesExpenseId:string|null;reversedByExpenseId:string|null}>(`SELECT e.expense_type AS "expenseType",e.amount_minor AS "amountMinor",e.allocation_scope AS "allocationScope",e.allocation_basis AS "allocationBasis",e.reverses_expense_id AS "reversesExpenseId",r.id AS "reversedByExpenseId"
+      FROM app.shop_expenses e LEFT JOIN app.shop_expenses r ON r.tenant_id=e.tenant_id AND r.shop_id=e.shop_id AND r.reverses_expense_id=e.id
+      WHERE e.shop_id=$1 AND e.id=$2`,[d.shopId,id]);
+    if(!original)throw new AppError(404,'EXPENSE_NOT_FOUND','ไม่พบค่าใช้จ่ายที่ต้องการแก้กลับ');
+    if(original.reversesExpenseId)throw new AppError(409,'REVERSAL_NOT_REVERSIBLE','รายการแก้กลับไม่สามารถถูกแก้กลับซ้ำได้');
+    if(original.reversedByExpenseId)throw new AppError(409,'EXPENSE_ALREADY_REVERSED','ค่าใช้จ่ายนี้ถูกแก้กลับไว้แล้ว');
+    const reversalId=randomUUID();
+    await tx.query(`INSERT INTO app.shop_expenses(tenant_id,id,shop_id,source_expense_id,expense_type,occurred_on,amount_minor,allocation_scope,allocation_basis,source_scope,note,actor_id,reverses_expense_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'expense_reversal',$10,$11,$12)`,[ctx.tenantId,reversalId,d.shopId,sourceExpenseId,original.expenseType,d.occurredOn,original.amountMinor,original.allocationScope,original.allocationBasis,d.note,ctx.userId,id]);
+    await audit(tx,ctx,'shop_expense.reversed',reversalId,{shopId:d.shopId,sourceExpenseId,reversedExpenseId:id,expenseType:original.expenseType,amountMinor:original.amountMinor});
+    return {id:reversalId,sourceExpenseId,duplicate:false,reversedExpenseId:id};
+  });
+}
+
+export async function shopExpenses(ctx:Context,shopId:string):Promise<ShopExpenseLedger>{
+  return withTenant(ctx,async(tx,role)=>{
+    expenseAccess(role,false);await assertShop(tx,ctx,shopId);
+    type RawSummary={entryCount:number;activeExpenseCount:number;reversedExpenseCount:number;activeAmountMinor:string};
+    const [raw]=await tx.query<RawSummary>(`SELECT count(*)::int AS "entryCount",
+      count(*) FILTER(WHERE e.reverses_expense_id IS NULL AND NOT EXISTS(SELECT 1 FROM app.shop_expenses r WHERE r.tenant_id=e.tenant_id AND r.shop_id=e.shop_id AND r.reverses_expense_id=e.id))::int AS "activeExpenseCount",
+      count(*) FILTER(WHERE e.reverses_expense_id IS NULL AND EXISTS(SELECT 1 FROM app.shop_expenses r WHERE r.tenant_id=e.tenant_id AND r.shop_id=e.shop_id AND r.reverses_expense_id=e.id))::int AS "reversedExpenseCount",
+      coalesce(sum(CASE WHEN e.reverses_expense_id IS NULL THEN e.amount_minor ELSE -e.amount_minor END),0)::text AS "activeAmountMinor"
+      FROM app.shop_expenses e WHERE e.shop_id=$1`,[shopId]);
+    type RawCategory={expenseType:ShopExpenseType;amountMinor:string};
+    const categoryRows=await tx.query<RawCategory>(`SELECT e.expense_type AS "expenseType",coalesce(sum(CASE WHEN e.reverses_expense_id IS NULL THEN e.amount_minor ELSE -e.amount_minor END),0)::text AS "amountMinor"
+      FROM app.shop_expenses e WHERE e.shop_id=$1 GROUP BY e.expense_type ORDER BY e.expense_type`,[shopId]);
+    type RawItem=Omit<ShopExpenseItem,'occurredOn'|'createdAt'>&{occurredOn:string|Date;createdAt:string|Date};
+    const rows=await tx.query<RawItem>(`SELECT e.id,e.source_expense_id AS "sourceExpenseId",e.expense_type AS "expenseType",e.occurred_on AS "occurredOn",e.amount_minor AS "amountMinor",e.allocation_scope AS "allocationScope",e.allocation_basis AS "allocationBasis",e.note,e.created_at AS "createdAt",e.reverses_expense_id AS "reversesExpenseId",r.id AS "reversedByExpenseId"
+      FROM app.shop_expenses e LEFT JOIN app.shop_expenses r ON r.tenant_id=e.tenant_id AND r.shop_id=e.shop_id AND r.reverses_expense_id=e.id
+      WHERE e.shop_id=$1 ORDER BY e.occurred_on DESC,e.created_at DESC LIMIT 100`,[shopId]);
+    return {summary:{...raw,activeAmountMinor:Number(raw.activeAmountMinor)},categoryTotals:categoryRows.map(row=>({...row,amountMinor:Number(row.amountMinor)})),items:rows.map(row=>({...row,occurredOn:isoDate(row.occurredOn),createdAt:new Date(row.createdAt).toISOString()})),limit:100,asOf:new Date().toISOString()};
+  });
+}
+
+export function applyShopExpenses(adjustedContributionMinor:number|null,activeExpenseMinor:number){
+  return adjustedContributionMinor===null?null:adjustedContributionMinor-activeExpenseMinor;
+}
