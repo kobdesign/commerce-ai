@@ -1,10 +1,19 @@
 import { test,expect,type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { demo } from '../../packages/domain/src/demo';
+import { closePools,resolveContext } from '../../packages/db/src/index';
+import { commitDraft,saveDraft } from '../../packages/imports/src/index';
 const soldOn=new Date().toISOString().slice(0,10);
+test.afterAll(closePools);
 
 async function signIn(page:Page){
   await page.goto('/login');await page.getByLabel('อีเมล',{exact:true}).fill('owner@chino.demo');await page.getByLabel('รหัสผ่าน',{exact:true}).fill(demo.password);await page.getByRole('button',{name:'เข้าสู่พื้นที่ทำงาน'}).click();await expect(page.getByRole('heading',{name:'ภาพรวม',exact:true})).toBeVisible();await page.getByLabel('เลือกร้านค้า',{exact:true}).selectOption(demo.shops.tiktok);
+}
+async function importedOrder(stamp:number,suffix:string){
+  const ctx=await resolveContext(demo.users.owner,demo.tenants.chino),order=`ZZZ-${stamp}-${suffix}`;
+  const csv=`order_id,source_line_id,sku,quantity,date,net_receipt,platform_fee\n${order},SALE-${suffix}-${stamp},CH-L-BK-32,1,${soldOn},319.00,80.00\n`;
+  const input={shopId:demo.shops.tiktok,filename:`sale-${suffix.toLowerCase()}-${stamp}.csv`,delimiter:',' as const,csv,mapping:{orderId:'order_id',sourceLineId:'source_line_id',sku:'sku',quantity:'quantity',date:'date',netSales:'net_receipt',platformFee:'platform_fee'}};
+  const draft=await saveDraft(ctx,input);await commitDraft(ctx,{shopId:input.shopId,draftId:draft.id});return order;
 }
 
 test('confirms a reviewed CSV once and traces contribution back to its source draft',async({page})=>{
@@ -24,7 +33,7 @@ test('confirms a reviewed CSV once and traces contribution back to its source dr
   await page.getByRole('checkbox',{name:/ฉันตรวจแล้ว/}).check();await page.getByRole('button',{name:'ยืนยันนำเข้าข้อมูล',exact:true}).click();await expect(page.getByRole('status')).toContainText('นำเข้า 1 รายการแล้ว');
   await page.getByRole('link',{name:'ดูเงินรับและต้นทุน',exact:true}).click();await expect(page.getByRole('heading',{name:'เงินรับและต้นทุน',exact:true})).toBeVisible();
   const orderRow=page.getByRole('row').filter({hasText:order});await expect(orderRow).toContainText('฿319.00');await expect(orderRow).toContainText('฿80.00');await expect(orderRow).toContainText('฿250.00');await expect(orderRow).toContainText('฿69.00');
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.screenshot({path:'artifacts/financial-summary-390.png',fullPage:true});
   await orderRow.getByRole('link',{name:'เปิดร่างต้นทาง',exact:true}).click();await expect(page.getByRole('status')).toContainText('นำเข้าร่างนี้แล้ว');await expect(page.getByRole('button',{name:'ยืนยันนำเข้าข้อมูล',exact:true})).toHaveCount(0);
 });
@@ -68,7 +77,7 @@ test('records and reverses a partial refund without rewriting the sale',async({p
   await page.getByRole('button',{name:'ยืนยันการแก้กลับ',exact:true}).click();await expect(page.getByRole('status')).toContainText(`แก้กลับรายการ ${sourceEventId} แล้ว`);
   const reversalCard=page.locator('.adjustment-card').filter({hasText:order}).filter({hasText:'รายการแก้กลับ'});await expect(reversalCard).toContainText('+฿100.00');await expect(reversalCard.locator('.adjustment-card-reference')).toHaveText(/^REV-[0-9a-f-]{36}$/);await expect(originalCard).toContainText('ถูกแก้กลับแล้ว');
   await page.getByRole('link',{name:/ดูผลต่อเงินรับ/}).click();const restoredRow=page.getByRole('row').filter({hasText:order}),cells=restoredRow.getByRole('cell');await expect(cells.nth(5)).toContainText('+฿0.00');await expect(cells.nth(6)).toHaveText('฿319.00');await expect(cells.nth(8)).toHaveText('฿69.00');
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.screenshot({path:'artifacts/financial-refund-390.png',fullPage:true});
 });
 
@@ -86,19 +95,13 @@ test('records and reverses an allocated shop expense and shows its effect separa
   const reversalReason=`แก้กลับเอกสาร ${reference} ที่บันทึกซ้ำ`;await expect(page.getByText('ระบบจะสร้างรหัสรายการแก้กลับและผูกกับรายการเดิมให้อัตโนมัติ',{exact:true})).toBeVisible();await page.getByLabel('เหตุผลที่แก้กลับ',{exact:true}).fill(reversalReason);await page.getByRole('checkbox',{name:/ยกเลิกผลของรายการนี้/}).check();
   await page.getByRole('button',{name:'ยืนยันการแก้กลับ',exact:true}).click();await expect(page.getByRole('status')).toContainText('แก้กลับ ค่าโฆษณา แล้ว');
   await expect(page.locator('.adjustment-card').filter({hasText:reference}).filter({hasText:'ถูกแก้กลับแล้ว'}).first()).toBeVisible();await expect(page.locator('.adjustment-card').filter({hasText:'รายการแก้กลับ'}).filter({hasText:reversalReason}).first()).toContainText('+฿250.00');
-  await expect(page.getByText('฿0.00',{exact:true}).first()).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await expect(page.getByText('฿0.00',{exact:true}).first()).toBeVisible();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.screenshot({path:'artifacts/shop-expenses-390.png',fullPage:true});
 });
 
 test('reconciles a marketplace payout with an imported order on mobile',async({page})=>{
-  await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
-  const stamp=Date.now(),order=`ZZZ-${stamp}-SETTLEMENT`,saleLine=`SALE-LINE-${stamp}`,payout=`PAYOUT-${stamp}`,payoutLine=`PAYOUT-LINE-${stamp}`;
-  const csv=`order_id,source_line_id,sku,quantity,date,net_receipt,platform_fee\n${order},${saleLine},CH-L-BK-32,1,${soldOn},319.00,80.00\n`;
-  await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:`settlement-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(csv)});
-  await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();await page.getByRole('button',{name:'บันทึกร่างเพื่อตรวจ',exact:true}).click();
-  await page.getByRole('checkbox',{name:/ฉันตรวจแล้ว/}).check();await page.getByRole('button',{name:'ยืนยันนำเข้าข้อมูล',exact:true}).click();await expect(page.getByRole('status')).toContainText('นำเข้า 1 รายการแล้ว');
-
-  await page.getByRole('link',{name:'กระทบยอดเงินโอน',exact:true}).click();await expect(page.getByRole('heading',{name:'กระทบยอดเงินโอน',exact:true})).toBeVisible();
+  await page.setViewportSize({width:390,height:900});const stamp=Date.now(),order=await importedOrder(stamp,'SETTLEMENT'),payout=`PAYOUT-${stamp}`,payoutLine=`PAYOUT-LINE-${stamp}`;
+  await signIn(page);await page.getByRole('link',{name:'กระทบยอดเงินโอน',exact:true}).click();await expect(page.getByRole('heading',{name:'กระทบยอดเงินโอน',exact:true})).toBeVisible();
   await page.getByLabel('รหัสรอบโอน',{exact:true}).fill(payout);await page.getByLabel('ยอดโอนรวมตามรายงาน (บาท)',{exact:true}).fill('319.00');
   await page.getByLabel('รหัสบรรทัดต้นทาง',{exact:true}).fill(payoutLine);await page.getByLabel('เลขคำสั่งซื้อสำหรับกระทบยอด',{exact:true}).fill(order);
   await page.getByLabel('ยอดที่จัดสรรให้คำสั่งซื้อนี้ (บาท)',{exact:true}).fill('319.00');await page.getByLabel('หลักฐานหรือหมายเหตุการโอน',{exact:true}).fill('Statement TikTok รอบทดสอบ');
@@ -109,8 +112,22 @@ test('reconciles a marketplace payout with an imported order on mobile',async({p
   const orderTable=page.getByRole('heading',{name:'เทียบตามคำสั่งซื้อ',exact:true}).locator('xpath=ancestor::section');const orderRow=orderTable.getByRole('row').filter({hasText:order});
   await expect(orderRow).toContainText('฿319.00');await expect(orderRow).toContainText('+฿0.00');await expect(orderRow).toContainText('ตรงกัน');
   const evidence=page.locator('.settlement-card').filter({hasText:payoutLine});await expect(evidence).toContainText(order);await expect(evidence).toContainText('พบคำสั่งซื้อ');
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.screenshot({path:'artifacts/settlement-reconciliation-390.png',fullPage:true});
+});
+
+test('imports a settlement CSV with mapping, preview and immutable source evidence',async({page})=>{
+  await page.setViewportSize({width:390,height:900});const stamp=Date.now(),order=await importedOrder(stamp,'SETTLEMENT-CSV'),payout=`PAYOUT-CSV-${stamp}`,payoutLine=`PAYOUT-CSV-LINE-${stamp}`;
+  await signIn(page);await page.getByRole('link',{name:'กระทบยอดเงินโอน',exact:true}).click();await page.getByText('นำเข้า statement จาก CSV',{exact:true}).click();
+  const statementCsv=`payout_reference,settled_on,payout_total,source_line_id,order_id,allocation_amount,note\n${payout},${soldOn},319.00,${payoutLine},${order},319.00,Statement CSV ทดสอบ\n`;
+  await page.getByLabel('เลือกไฟล์ statement CSV',{exact:true}).setInputFiles({name:`statement-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(statementCsv)});
+  await expect(page.getByRole('heading',{name:'จับคู่คอลัมน์',exact:true})).toBeVisible();await expect(page.getByLabel('คอลัมน์ รหัสรอบโอน',{exact:true})).toHaveValue('payout_reference');
+  await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();await expect(page.getByText(order,{exact:true}).first()).toBeVisible();await expect(page.getByText('พร้อมนำเข้า',{exact:true})).toBeVisible();
+  await page.getByRole('checkbox',{name:/มาจาก statement นี้/}).check();await page.getByRole('button',{name:'ยืนยันนำเข้า statement',exact:true}).click();await expect(page.getByRole('status')).toContainText('นำเข้า 1 บรรทัด จาก 1 รอบโอนแล้ว');
+  const payoutTable=page.getByRole('heading',{name:'รอบโอน',exact:true}).locator('xpath=ancestor::section');await expect(payoutTable.getByRole('row').filter({hasText:payout})).toContainText('กระทบครบ');
+  const downloadPromise=page.waitForEvent('download');await page.getByLabel(`ดาวน์โหลดไฟล์ต้นฉบับ statement-${stamp}.csv`,{exact:true}).click();const download=await downloadPromise,downloadPath=await download.path();expect(downloadPath).not.toBeNull();expect(await readFile(downloadPath!,'utf8')).toBe(statementCsv);
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.screenshot({path:'artifacts/settlement-csv-import-390.png',fullPage:true});
 });
 
 test('confirms a missing cost from the review inbox without changing the imported line',async({page})=>{
@@ -128,6 +145,6 @@ test('confirms a missing cost from the review inbox without changing the importe
   await reviewCard.getByRole('button',{name:'ยืนยันต้นทุนรายการนี้',exact:true}).click();await expect(page.getByRole('status')).toContainText(`ยืนยันต้นทุนของคำสั่งซื้อ ${order} แล้ว`);await expect(page.locator('.review-card').filter({hasText:order})).toHaveCount(0);
   await page.getByRole('link',{name:'เงินรับและต้นทุน',exact:true}).click();const resolved=page.getByRole('row').filter({hasText:order});
   await expect(resolved).toContainText('฿200.00');await expect(resolved).toContainText('฿300.00');await expect(page.getByText(/ใช้ต้นทุนที่ผู้ใช้ยืนยันย้อนหลัง/)).toBeVisible();
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.screenshot({path:'artifacts/cost-review-390.png',fullPage:true});
 });

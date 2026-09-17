@@ -2,9 +2,11 @@
 
 ชื่อชั่วคราวสำหรับโครงการช่วยร้านค้าออนไลน์ตรวจเงินรับและกำไร มี AI ในกระบวนการทำงาน รองรับหลายองค์กร และมีเส้นทางขยายสู่ Enterprise
 
-สถานะ: **Product workflow v1.3 — เว็บแอป, import worker และ PostgreSQL พร้อมเตรียม staging บน Render**
+สถานะ: **Product workflow v1.4 — เว็บแอป, import worker และ PostgreSQL พร้อมเตรียม staging บน Render**
 
-มี login, หลายบริษัท/ร้าน, catalog หลายประเภทสินค้า, รายละเอียดที่เพิ่มเองได้, หลาย SKU ต่อสินค้า, แก้ไขรายละเอียด/ราคา/ต้นทุนพร้อมประวัติ, สิทธิ์รายบทบาท/ร้าน, audit, AI tool preview, flow ตรวจรายการขายและส่งยืนยันให้ worker ทำต่อเบื้องหลัง, หลักฐานไฟล์ต้นฉบับพร้อม checksum, source line identity ป้องกันยอดซ้ำข้ามไฟล์, Review Inbox สำหรับยืนยันต้นทุนที่ขาด, refund/fee rebate, การกระทบยอด statement ต่อรอบโอนและคำสั่งซื้อ และบัญชีค่าใช้จ่ายร้านแบบ append-only พร้อมการแก้กลับโดยไม่ลบหลักฐานแล้ว ข้อมูลเริ่มต้นเป็นข้อมูลสมมติ ตัวเลข “เงินเหลือหลังค่าใช้จ่ายที่บันทึก” ยังไม่ใช่กำไรสุทธิหรือระบบ production/Enterprise ที่ตรวจรับแล้ว การสร้างทรัพยากร Render จริงต้องตรวจราคาและยืนยันใน Render Dashboard ก่อน
+มี login, หลายบริษัท/ร้าน, catalog หลายประเภทสินค้า, รายละเอียดที่เพิ่มเองได้, หลาย SKU ต่อสินค้า, แก้ไขรายละเอียด/ราคา/ต้นทุนพร้อมประวัติ, สิทธิ์รายบทบาท/ร้าน, audit, AI tool preview, flow ตรวจรายการขายและส่งยืนยันให้ worker ทำต่อเบื้องหลัง, หลักฐานไฟล์ต้นฉบับพร้อม checksum, source line identity ป้องกันยอดซ้ำข้ามไฟล์, Review Inbox สำหรับยืนยันต้นทุนที่ขาด, refund/fee rebate, การนำเข้าและกระทบยอด statement ต่อรอบโอนและคำสั่งซื้อ และบัญชีค่าใช้จ่ายร้านแบบ append-only พร้อมการแก้กลับโดยไม่ลบหลักฐานแล้ว ข้อมูลเริ่มต้นเป็นข้อมูลสมมติ ตัวเลข “เงินเหลือหลังค่าใช้จ่ายที่บันทึก” ยังไม่ใช่กำไรสุทธิหรือระบบ production/Enterprise ที่ตรวจรับแล้ว การสร้างทรัพยากร Render จริงต้องตรวจราคาและยืนยันใน Render Dashboard ก่อน
+
+การนำเข้า statement หลายบรรทัดจาก CSV พร้อม preview และหลักฐานต้นฉบับ: [Product workflow v1.4](docs/27-settlement-csv-import.md)
 
 การกระทบยอดเงินโอนตาม statement พร้อมรายการที่ต้องตรวจ: [Product workflow v1.3](docs/26-settlement-reconciliation.md)
 
@@ -51,7 +53,7 @@ npm run dev
 
 คู่มือคำสั่ง บัญชีทดสอบ ขอบเขตฟีเจอร์และข้อจำกัด: [Foundation runbook](docs/10-foundation-runbook.md)
 
-ผลตรวจล่าสุด: **68 integration tests และ 19 browser tests ผ่าน** รวม settlement reconciliation, durable import jobs, raw source evidence, shop expense ledger และ health check สำหรับ staging ดู [ผลตรวจ v1.3](docs/26-settlement-reconciliation.md), [Render staging readiness](docs/21-render-staging.md) หรือ [Business Logic verification](docs/15-business-logic-verification.md)
+ผลตรวจล่าสุด: **72 integration tests และ 20 browser tests ผ่าน** รวม settlement CSV import, settlement reconciliation, durable import jobs, raw source evidence, shop expense ledger และ health check สำหรับ staging ดู [ผลตรวจ v1.4](docs/27-settlement-csv-import.md), [Render staging readiness](docs/21-render-staging.md) หรือ [Business Logic verification](docs/15-business-logic-verification.md)
 
 เอกสารอ้างอิงบทสนทนาของผู้ใช้ ข้อมูลร้านจริงและเทคโนโลยีที่ทีมถนัดยังรอยืนยัน ตัวอย่างทั้งหมดที่ติดป้าย synthetic ไม่ใช่ข้อมูลร้านหรือรูปแบบไฟล์ทางการของแพลตฟอร์ม
 
