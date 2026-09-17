@@ -7,7 +7,7 @@ async function signIn(page:Page){
 
 test('confirms a reviewed CSV once and traces contribution back to its source draft',async({page})=>{
   await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
-  const stamp=Date.now(),order=`FIN-E2E-${stamp}`,filename=`financial-${stamp}.csv`;
+  const stamp=Date.now(),order=`ZZZ-${stamp}-FIN`,filename=`financial-${stamp}.csv`;
   const csv=`order_id,sku,quantity,date,net_receipt,platform_fee\n${order},CH-L-BK-32,1,2026-09-16,319.00,80.00\n`;
   await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:filename,mimeType:'text/csv',buffer:Buffer.from(csv)});
   await expect(page.getByRole('heading',{name:'จับคู่คอลัมน์',exact:true})).toBeVisible();
@@ -45,7 +45,7 @@ test('maps a source line ID and blocks the same marketplace line in a later file
 
 test('records and reverses a partial refund without rewriting the sale',async({page})=>{
   await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
-  const stamp=Date.now(),order=`REFUND-E2E-${stamp}`,sourceEventId=`REFUND-EVENT-${stamp}`;
+  const stamp=Date.now(),order=`ZZZ-${stamp}-REFUND`,sourceEventId=`REFUND-EVENT-${stamp}`;
   const csv=`order_id,source_line_id,sku,quantity,date,net_receipt,platform_fee\n${order},REFUND-LINE-${stamp},CH-L-BK-32,1,2026-09-16,319.00,80.00\n`;
   await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:`refund-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(csv)});
   await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();await page.getByRole('button',{name:'บันทึกร่างเพื่อตรวจ',exact:true}).click();
@@ -68,9 +68,27 @@ test('records and reverses a partial refund without rewriting the sale',async({p
   await page.screenshot({path:'artifacts/financial-refund-390.png',fullPage:true});
 });
 
+test('records and reverses an allocated shop expense and shows its effect separately from contribution',async({page})=>{
+  await page.setViewportSize({width:390,height:900});await signIn(page);
+  const stamp=Date.now(),reference=`AD-STATEMENT-${stamp}`;
+  await page.getByRole('link',{name:'ค่าใช้จ่ายร้าน',exact:true}).click();await expect(page.getByRole('heading',{name:'ค่าใช้จ่ายร้าน',exact:true})).toBeVisible();
+  await expect(page.locator('.financial-event-entry select').first()).toHaveValue('advertising');await page.getByLabel('จำนวนเงินค่าใช้จ่าย (บาท)',{exact:true}).fill('250.00');await page.getByLabel('เอกสารอ้างอิงค่าใช้จ่าย',{exact:true}).fill(reference);
+  await page.getByLabel('ขอบเขตค่าใช้จ่าย',{exact:true}).selectOption('shared_allocated');await page.getByLabel('วิธีแบ่งค่าใช้จ่ายส่วนกลาง',{exact:true}).fill('แบ่ง 40% ตามสัดส่วนยอดขายของร้าน');
+  await page.getByLabel('รายละเอียดค่าใช้จ่าย',{exact:true}).fill('ค่าโฆษณา TikTok รอบวันที่ 1–15 ก.ย.');await page.getByRole('checkbox',{name:/ยอดนี้จ่ายแยกและยังไม่รวมอยู่ในเงินรับสุทธิ/}).check();
+  await page.getByRole('button',{name:'บันทึกค่าใช้จ่าย',exact:true}).click();await expect(page.getByRole('status')).toContainText('บันทึกค่าใช้จ่ายแล้ว');
+  const expenseCard=page.locator('.adjustment-card').filter({hasText:reference});await expect(expenseCard).toBeVisible();await expect(expenseCard).toContainText('-฿250.00');await expect(expenseCard).toContainText('แบ่งจากส่วนกลาง');await expect(expenseCard).toContainText('แบ่ง 40% ตามสัดส่วนยอดขายของร้าน');
+  await page.getByRole('link',{name:'ดูเงินรับและต้นทุน',exact:true}).click();const impact=page.locator('.expense-impact-summary');await expect(impact).toContainText('ค่าโฆษณา');await expect(impact).toContainText('฿250.00');await expect(impact).toContainText('เงินเหลือหลังค่าใช้จ่ายที่บันทึก');
+  await page.getByRole('navigation').getByRole('link',{name:'ค่าใช้จ่ายร้าน',exact:true}).click();await expenseCard.getByRole('button',{name:'แก้กลับรายการ',exact:true}).click();
+  const reversalReason=`แก้กลับเอกสาร ${reference} ที่บันทึกซ้ำ`;await expect(page.getByText('ระบบจะสร้างรหัสรายการแก้กลับและผูกกับรายการเดิมให้อัตโนมัติ',{exact:true})).toBeVisible();await page.getByLabel('เหตุผลที่แก้กลับ',{exact:true}).fill(reversalReason);await page.getByRole('checkbox',{name:/ยกเลิกผลของรายการนี้/}).check();
+  await page.getByRole('button',{name:'ยืนยันการแก้กลับ',exact:true}).click();await expect(page.getByRole('status')).toContainText('แก้กลับ ค่าโฆษณา แล้ว');
+  await expect(page.locator('.adjustment-card').filter({hasText:reference}).filter({hasText:'ถูกแก้กลับแล้ว'}).first()).toBeVisible();await expect(page.locator('.adjustment-card').filter({hasText:'รายการแก้กลับ'}).filter({hasText:reversalReason}).first()).toContainText('+฿250.00');
+  await expect(page.getByText('฿0.00',{exact:true}).first()).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.screenshot({path:'artifacts/shop-expenses-390.png',fullPage:true});
+});
+
 test('confirms a missing cost from the review inbox without changing the imported line',async({page})=>{
   await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
-  const stamp=Date.now(),order=`REVIEW-E2E-${stamp}`,filename=`review-${stamp}.csv`;
+  const stamp=Date.now(),order=`ZZZ-${stamp}-REVIEW`,filename=`review-${stamp}.csv`;
   const csv=`order_id,sku,quantity,date,net_receipt\n${order},CH-L-NV-34,1,2026-09-16,500.00\n`;
   await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:filename,mimeType:'text/csv',buffer:Buffer.from(csv)});
   await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();await expect(page.getByText(order,{exact:true})).toBeVisible();
