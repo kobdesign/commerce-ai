@@ -107,28 +107,37 @@ export async function saveDraft(ctx:Context,input:unknown){
     return {id,duplicate:false,source:evidenceDto(source)};
   });
 }
-export type Draft={id:string;filename:string;created_at:Date;preview:Preview;batch_id:string|null;committed_at:Date|null;source:ImportEvidence|null};
+export type ImportCommitJobStatus='queued'|'running'|'succeeded'|'failed';
+export type ImportCommitJob={id:string;status:ImportCommitJobStatus;attemptCount:number;result:{id:string;duplicate:boolean;lines:number}|null;errorCode:string|null;errorMessage:string|null;requestedAt:string;startedAt:string|null;completedAt:string|null};
+type StoredImportCommitJob={jobId:string;jobStatus:ImportCommitJobStatus;attemptCount:number;jobResult:{id:string;duplicate:boolean;lines:number}|null;errorCode:string|null;errorMessage:string|null;requestedAt:Date;startedAt:Date|null;completedAt:Date|null};
+function jobDto(job:StoredImportCommitJob):ImportCommitJob{return {id:job.jobId,status:job.jobStatus,attemptCount:job.attemptCount,result:job.jobResult,errorCode:job.errorCode,errorMessage:job.errorMessage,requestedAt:job.requestedAt.toISOString(),startedAt:job.startedAt?.toISOString()??null,completedAt:job.completedAt?.toISOString()??null};}
+export type Draft={id:string;filename:string;created_at:Date;preview:Preview;batch_id:string|null;committed_at:Date|null;source:ImportEvidence|null;job:ImportCommitJob|null};
 export async function importDrafts(ctx:Context,shopId:string){return withTenant(ctx,async(tx,role)=>{
   access(role,false);await assertShop(tx,ctx,shopId);
-  return tx.query<{id:string;filename:string;created_at:Date;total:number;invalid:number;batch_id:string|null;committed_at:Date|null;source_hash:string|null;source_byte_size:number|null;source_schema_version:string|null}>(`SELECT d.id,d.filename,d.created_at,(d.preview->>'total')::int AS total,(d.preview->>'invalid')::int AS invalid,b.id AS batch_id,b.committed_at,s.source_hash,s.byte_size AS source_byte_size,s.schema_version AS source_schema_version
+  return tx.query<{id:string;filename:string;created_at:Date;total:number;invalid:number;batch_id:string|null;committed_at:Date|null;source_hash:string|null;source_byte_size:number|null;source_schema_version:string|null;job_status:ImportCommitJobStatus|null;job_error_message:string|null}>(`SELECT d.id,d.filename,d.created_at,(d.preview->>'total')::int AS total,(d.preview->>'invalid')::int AS invalid,b.id AS batch_id,b.committed_at,s.source_hash,s.byte_size AS source_byte_size,s.schema_version AS source_schema_version,
+    j.status AS job_status,j.error_message AS job_error_message
     FROM app.import_drafts d LEFT JOIN app.import_batches b ON b.tenant_id=d.tenant_id AND b.draft_id=d.id
     LEFT JOIN app.import_sources s ON s.tenant_id=d.tenant_id AND s.id=d.source_id
+    LEFT JOIN app.import_commit_jobs j ON j.tenant_id=d.tenant_id AND j.draft_id=d.id
     WHERE d.shop_id=$1 ORDER BY d.created_at DESC LIMIT 30`,[shopId]);
 });}
 export async function getDraft(ctx:Context,shopId:string,id:string){uuid.parse(id);return withTenant(ctx,async(tx,role)=>{
   access(role,false);await assertShop(tx,ctx,shopId);
-  type StoredDraft=Omit<Draft,'source'>&{sourceId:string|null;contentType:string|null;byteSize:number|null;sourceHash:string|null;adapterKey:string|null;schemaVersion:string|null;storageVersion:string|null;sourceCreatedAt:Date|null};
+  type StoredDraft=Omit<Draft,'source'|'job'>&{sourceId:string|null;contentType:string|null;byteSize:number|null;sourceHash:string|null;adapterKey:string|null;schemaVersion:string|null;storageVersion:string|null;sourceCreatedAt:Date|null}&Partial<StoredImportCommitJob>;
   const [draft]=await tx.query<StoredDraft>(`SELECT d.id,d.filename,d.created_at,d.preview,b.id AS batch_id,b.committed_at,
-    s.id AS "sourceId",s.content_type AS "contentType",s.byte_size AS "byteSize",s.source_hash AS "sourceHash",s.adapter_key AS "adapterKey",s.schema_version AS "schemaVersion",s.storage_version AS "storageVersion",s.created_at AS "sourceCreatedAt"
+    s.id AS "sourceId",s.content_type AS "contentType",s.byte_size AS "byteSize",s.source_hash AS "sourceHash",s.adapter_key AS "adapterKey",s.schema_version AS "schemaVersion",s.storage_version AS "storageVersion",s.created_at AS "sourceCreatedAt",
+    j.id AS "jobId",j.status AS "jobStatus",j.attempt_count AS "attemptCount",j.result AS "jobResult",j.error_code AS "errorCode",j.error_message AS "errorMessage",j.requested_at AS "requestedAt",j.started_at AS "startedAt",j.completed_at AS "completedAt"
     FROM app.import_drafts d LEFT JOIN app.import_batches b ON b.tenant_id=d.tenant_id AND b.draft_id=d.id
     LEFT JOIN app.import_sources s ON s.tenant_id=d.tenant_id AND s.id=d.source_id
+    LEFT JOIN app.import_commit_jobs j ON j.tenant_id=d.tenant_id AND j.draft_id=d.id
     WHERE d.id=$1 AND d.shop_id=$2`,[id,shopId]);
   if(!draft)throw new AppError(404,'NOT_FOUND','ไม่พบร่างในร้านนี้');
-  const {sourceId,contentType,byteSize,sourceHash,adapterKey,schemaVersion,storageVersion,sourceCreatedAt,...saved}=draft;
+  const {sourceId,contentType,byteSize,sourceHash,adapterKey,schemaVersion,storageVersion,sourceCreatedAt,jobId,jobStatus,attemptCount,jobResult,errorCode,errorMessage,requestedAt,startedAt,completedAt,...saved}=draft;
   const source=sourceId&&contentType&&byteSize!==null&&sourceHash&&adapterKey&&schemaVersion&&storageVersion&&sourceCreatedAt
     ?evidenceDto({filename:draft.filename,contentType,byteSize,sourceHash,adapterKey,schemaVersion,storageVersion,createdAt:sourceCreatedAt})
     :null;
-  return {...saved,source};
+  const job=jobId&&jobStatus&&attemptCount!==undefined&&requestedAt?jobDto({jobId,jobStatus,attemptCount,jobResult:jobResult??null,errorCode:errorCode??null,errorMessage:errorMessage??null,requestedAt,startedAt:startedAt??null,completedAt:completedAt??null}):null;
+  return {...saved,source,job};
 });}
 
 export type ImportSourceDownload={filename:string;contentType:string;byteSize:number;sourceHash:string;content:Buffer};
@@ -152,6 +161,42 @@ const storedPreviewSchema=z.object({rows:z.array(storedRowSchema).min(1).max(100
 const commitInput=z.object({shopId:uuid,draftId:uuid}).strict();
 const duplicateSourceMessage='พบรายการต้นทางที่เคยนำเข้าแล้ว กรุณาสร้างร่างใหม่และนำรายการซ้ำออก';
 function isSourceIdentityConflict(error:unknown){const e=error as {code?:string;constraint?:string}|null;return e?.code==='23505'&&e.constraint==='sales_lines_source_identity_idx';}
+
+export async function requestDraftCommit(ctx:Context,input:unknown):Promise<ImportCommitJob>{
+  const d=commitInput.parse(input);
+  return withTenant(ctx,async(tx,role)=>{
+    access(role);await assertShop(tx,ctx,d.shopId);
+    const [draft]=await tx.query<{id:string}>('SELECT id FROM app.import_drafts WHERE id=$1 AND shop_id=$2',[d.draftId,d.shopId]);
+    if(!draft)throw new AppError(404,'NOT_FOUND','ไม่พบร่างในร้านนี้');
+    const id=randomUUID();
+    const inserted=await tx.query<{id:string}>(`INSERT INTO app.import_commit_jobs(tenant_id,id,shop_id,draft_id,requested_by)
+      VALUES($1,$2,$3,$4,$5) ON CONFLICT(tenant_id,draft_id) DO NOTHING RETURNING id`,[ctx.tenantId,id,d.shopId,d.draftId,ctx.userId]);
+    let [job]=await tx.query<StoredImportCommitJob>(`SELECT id AS "jobId",status AS "jobStatus",attempt_count AS "attemptCount",result AS "jobResult",error_code AS "errorCode",error_message AS "errorMessage",requested_at AS "requestedAt",started_at AS "startedAt",completed_at AS "completedAt"
+      FROM app.import_commit_jobs WHERE draft_id=$1 AND shop_id=$2`,[d.draftId,d.shopId]);
+    if(!job)throw new AppError(500,'IMPORT_QUEUE_FAILED','ไม่สามารถส่งรายการเข้าคิวได้');
+    let requeued=false;
+    if(!inserted.length&&job.jobStatus==='failed'){
+      [job]=await tx.query<StoredImportCommitJob>(`UPDATE app.import_commit_jobs SET status='queued',attempt_count=0,worker_name=NULL,result=NULL,error_code=NULL,error_message=NULL,next_attempt_at=clock_timestamp(),started_at=NULL,completed_at=NULL
+        WHERE id=$1 AND shop_id=$2 AND status='failed'
+        RETURNING id AS "jobId",status AS "jobStatus",attempt_count AS "attemptCount",result AS "jobResult",error_code AS "errorCode",error_message AS "errorMessage",requested_at AS "requestedAt",started_at AS "startedAt",completed_at AS "completedAt"`,[job.jobId,d.shopId]);
+      if(!job)throw new AppError(409,'IMPORT_JOB_CHANGED','สถานะงานเปลี่ยนแล้ว กรุณาลองใหม่');
+      requeued=true;
+    }
+    if(inserted.length||requeued)await audit(tx,ctx,inserted.length?'import.commit.queued':'import.commit.requeued',job.jobId,{shopId:d.shopId,draftId:d.draftId});
+    return jobDto(job);
+  });
+}
+
+export async function importCommitStatus(ctx:Context,input:unknown):Promise<ImportCommitJob>{
+  const d=commitInput.parse(input);
+  return withTenant(ctx,async(tx,role)=>{
+    access(role,false);await assertShop(tx,ctx,d.shopId);
+    const [job]=await tx.query<StoredImportCommitJob>(`SELECT id AS "jobId",status AS "jobStatus",attempt_count AS "attemptCount",result AS "jobResult",error_code AS "errorCode",error_message AS "errorMessage",requested_at AS "requestedAt",started_at AS "startedAt",completed_at AS "completedAt"
+      FROM app.import_commit_jobs WHERE draft_id=$1 AND shop_id=$2`,[d.draftId,d.shopId]);
+    if(!job)throw new AppError(404,'IMPORT_JOB_NOT_FOUND','ยังไม่มีคำขอนำเข้าร่างนี้');
+    return jobDto(job);
+  });
+}
 
 export async function commitDraft(ctx:Context,input:unknown){
   const d=commitInput.parse(input);

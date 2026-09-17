@@ -2,9 +2,11 @@
 
 ชื่อชั่วคราวสำหรับโครงการช่วยร้านค้าออนไลน์ตรวจเงินรับและกำไร มี AI ในกระบวนการทำงาน รองรับหลายองค์กร และมีเส้นทางขยายสู่ Enterprise
 
-สถานะ: **Product workflow v1.1 — เว็บแอปและ PostgreSQL พร้อมเตรียม staging บน Render**
+สถานะ: **Product workflow v1.2 — เว็บแอป, import worker และ PostgreSQL พร้อมเตรียม staging บน Render**
 
-มี login, หลายบริษัท/ร้าน, catalog หลายประเภทสินค้า, รายละเอียดที่เพิ่มเองได้, หลาย SKU ต่อสินค้า, แก้ไขรายละเอียด/ราคา/ต้นทุนพร้อมประวัติ, สิทธิ์รายบทบาท/ร้าน, audit, AI tool preview, flow ตรวจ/ยืนยันรายการขาย, หลักฐานไฟล์ต้นฉบับพร้อม checksum, source line identity ป้องกันยอดซ้ำข้ามไฟล์, Review Inbox สำหรับยืนยันต้นทุนที่ขาด, refund/fee rebate และบัญชีค่าใช้จ่ายร้านแบบ append-only พร้อมการแก้กลับโดยไม่ลบหลักฐานแล้ว ข้อมูลเริ่มต้นเป็นข้อมูลสมมติ ตัวเลข “เงินเหลือหลังค่าใช้จ่ายที่บันทึก” ยังไม่ใช่กำไรสุทธิหรือระบบ production/Enterprise ที่ตรวจรับแล้ว การสร้างทรัพยากร Render จริงต้องตรวจราคาและยืนยันใน Render Dashboard ก่อน
+มี login, หลายบริษัท/ร้าน, catalog หลายประเภทสินค้า, รายละเอียดที่เพิ่มเองได้, หลาย SKU ต่อสินค้า, แก้ไขรายละเอียด/ราคา/ต้นทุนพร้อมประวัติ, สิทธิ์รายบทบาท/ร้าน, audit, AI tool preview, flow ตรวจรายการขายและส่งยืนยันให้ worker ทำต่อเบื้องหลัง, หลักฐานไฟล์ต้นฉบับพร้อม checksum, source line identity ป้องกันยอดซ้ำข้ามไฟล์, Review Inbox สำหรับยืนยันต้นทุนที่ขาด, refund/fee rebate และบัญชีค่าใช้จ่ายร้านแบบ append-only พร้อมการแก้กลับโดยไม่ลบหลักฐานแล้ว ข้อมูลเริ่มต้นเป็นข้อมูลสมมติ ตัวเลข “เงินเหลือหลังค่าใช้จ่ายที่บันทึก” ยังไม่ใช่กำไรสุทธิหรือระบบ production/Enterprise ที่ตรวจรับแล้ว การสร้างทรัพยากร Render จริงต้องตรวจราคาและยืนยันใน Render Dashboard ก่อน
+
+งานยืนยันนำเข้าแบบเบื้องหลัง สถานะ และ retry: [Product workflow v1.2](docs/25-async-import-worker.md)
 
 หลักฐานไฟล์ต้นฉบับของการนำเข้าและการดาวน์โหลดตามสิทธิ์: [Product workflow v1.1](docs/24-import-source-evidence.md)
 
@@ -47,7 +49,7 @@ npm run dev
 
 คู่มือคำสั่ง บัญชีทดสอบ ขอบเขตฟีเจอร์และข้อจำกัด: [Foundation runbook](docs/10-foundation-runbook.md)
 
-ผลตรวจล่าสุด: **60 integration tests และ 18 browser tests ผ่าน** รวม raw source evidence, shop expense ledger และ health check สำหรับ staging ดู [ผลตรวจ v1.1](docs/24-import-source-evidence.md), [Render staging readiness](docs/21-render-staging.md) หรือ [Business Logic verification](docs/15-business-logic-verification.md)
+ผลตรวจล่าสุด: **62 integration tests และ 18 browser tests ผ่าน** รวม durable import jobs, raw source evidence, shop expense ledger และ health check สำหรับ staging ดู [ผลตรวจ v1.2](docs/25-async-import-worker.md), [Render staging readiness](docs/21-render-staging.md) หรือ [Business Logic verification](docs/15-business-logic-verification.md)
 
 เอกสารอ้างอิงบทสนทนาของผู้ใช้ ข้อมูลร้านจริงและเทคโนโลยีที่ทีมถนัดยังรอยืนยัน ตัวอย่างทั้งหมดที่ติดป้าย synthetic ไม่ใช่ข้อมูลร้านหรือรูปแบบไฟล์ทางการของแพลตฟอร์ม
 
