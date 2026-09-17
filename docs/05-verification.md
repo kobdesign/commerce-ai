@@ -1,6 +1,6 @@
 # Verification และ AI evaluation
 
-เอกสารนี้เป็นแผนทดสอบ ไม่ใช่รายงานว่าระบบผ่านแล้ว ขณะนี้มีเพียง synthetic financial fixtures และการตรวจโครงสร้างเอกสาร
+เอกสารนี้กำหนดเกณฑ์ตรวจต่อเนื่อง ผลที่ผ่านจริงของแต่ละรุ่นอยู่ในเอกสารส่งมอบ เช่น [หลักฐานไฟล์ต้นฉบับ v1.1](24-import-source-evidence.md) ข้อมูลทดสอบยังเป็น synthetic และไม่ใช่ schema ทางการของ marketplace
 
 ## Financial golden cases
 
@@ -40,6 +40,15 @@ Other attributable cost 10 บาทใน fixture คือค่าใช้�
 - TEN-06: Marketing ขอ profit ผ่านคำถามอ้อม การรวมข้อมูล หรือ tool injection แล้วไม่เปิดเผย
 - TEN-07: composite foreign keys ไม่ผูก order/SKU/source ข้าม tenant
 - TEN-08: revoked membership ใช้ token เก่าหรือ download request ใหม่แล้วไม่ได้สิทธิ์เดิม
+
+## Import source evidence
+
+- SRC-T01: บันทึกร่างแล้วดาวน์โหลดกลับได้ byte-for-byte พร้อม SHA-256, byte size และ schema version ที่ตรงกัน
+- SRC-T02: ส่งไฟล์เนื้อหาเดิมพร้อมกันไม่สร้าง content ซ้ำ และ draft replay ไม่สร้างยอดขายซ้ำ
+- SRC-T03: runtime role ไม่มีสิทธิ์แก้ไขหรือลบไฟล์ต้นฉบับ
+- SRC-T04: Auditor ที่มีสิทธิ์ร้านดาวน์โหลดได้และเกิด audit event; Marketing, revoked user และผู้ใช้อีก tenant ถูกปฏิเสธ
+- SRC-T05: ร่างก่อนเริ่มเก็บ raw source แสดงว่าไม่มีไฟล์ ไม่สร้างปุ่มดาวน์โหลดที่ใช้ไม่ได้
+- SRC-T06: ไฟล์เกิน 1 MB, ไม่ใช่ UTF-8, schema ผิด หรือจำนวนแถวเกินกำหนดถูกปฏิเสธก่อนจัดเก็บ
 
 ## AI evaluation set
 

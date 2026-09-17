@@ -1,10 +1,10 @@
 # Backlog และลำดับพัฒนา
 
-สถานะ ณ 2026-09-17: มี **local foundation, generic order-line, financial-event และ shop-expense vertical slice** แล้ว ดู [ผลส่งมอบ v1.0](22-shop-expense-ledger.md) FND-01/02/03, CAT-01, AI-01 และ QA-01 เริ่มมีโค้ดและการทดสอบ IMP-01/02/03/04 รวม source line deduplication, refund/fee rebate/unmatched/reversal และค่าใช้จ่ายระดับร้าน ส่วน production acceptance ยังขาด raw storage, marketplace adapters, settlement/payout, ad statement import, identity provider, backup/restore และ live model evaluation
+สถานะ ณ 2026-09-17: มี **local foundation, generic order-line, raw source evidence, financial-event และ shop-expense vertical slice** แล้ว ดู [ผลส่งมอบ v1.1](24-import-source-evidence.md) FND-01/02/03, CAT-01, AI-01 และ QA-01 เริ่มมีโค้ดและการทดสอบ IMP-01/02/03/04 รวม checksum/source storage, source line deduplication, refund/fee rebate/unmatched/reversal และค่าใช้จ่ายระดับร้าน ส่วน production acceptance ยังขาด private object storage และ retention policy, marketplace adapters, settlement/payout, ad statement import, identity provider, backup/restore และ live model evaluation
 
 ## ลำดับ dependency
 
-อัปเดต v1.0: generic CSV รองรับ mapping/review/commit แบบ idempotent, source line deduplication ข้ามไฟล์, snapshot ต้นทุน, refund/fee rebate และบัญชีค่าใช้จ่ายแบบ append-only, unmatched queue, summary/evidence และ RLS แล้ว ยังไม่ใช่ import worker, marketplace adapter, settlement/payout reconciliation หรือ financial acceptance ครบชุด ดู [ผลส่งมอบ](22-shop-expense-ledger.md)
+อัปเดต v1.1: generic CSV รองรับ raw source evidence, mapping/review/commit แบบ idempotent, source line deduplication ข้ามไฟล์, snapshot ต้นทุน, refund/fee rebate และบัญชีค่าใช้จ่ายแบบ append-only, unmatched queue, summary/evidence และ RLS แล้ว ยังไม่ใช่ import worker, private object storage, marketplace adapter, settlement/payout reconciliation หรือ financial acceptance ครบชุด ดู [ผลส่งมอบ](24-import-source-evidence.md)
 
 Discovery → Foundations → Import → Reconciliation & Metrics → AI Analysis → Pilot
 

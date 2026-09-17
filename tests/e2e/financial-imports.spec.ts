@@ -1,4 +1,5 @@
 import { test,expect,type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { demo } from '../../packages/domain/src/demo';
 const soldOn=new Date().toISOString().slice(0,10);
 
@@ -18,6 +19,8 @@ test('confirms a reviewed CSV once and traces contribution back to its source dr
   await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();await expect(page.getByText(order,{exact:true})).toBeVisible();
   await expect(page.getByText('฿319.00',{exact:true})).toBeVisible();await expect(page.getByText('฿80.00',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'บันทึกร่างเพื่อตรวจ',exact:true}).click();await expect(page.getByRole('status')).toContainText('บันทึกร่างแล้ว');
+  await expect(page.getByLabel('หลักฐานไฟล์ต้นฉบับ')).toContainText('เก็บไฟล์ต้นฉบับแล้ว');await expect(page.getByLabel('หลักฐานไฟล์ต้นฉบับ')).toContainText('รูปแบบรายการขาย v1');
+  const downloadPromise=page.waitForEvent('download');await page.getByRole('link',{name:'ดาวน์โหลดไฟล์ต้นฉบับ',exact:true}).click();const download=await downloadPromise,downloadPath=await download.path();expect(download.suggestedFilename()).toBe(filename);expect(downloadPath).not.toBeNull();expect(await readFile(downloadPath!,'utf8')).toBe(csv);
   await page.getByRole('checkbox',{name:/ฉันตรวจแล้ว/}).check();await page.getByRole('button',{name:'ยืนยันนำเข้าข้อมูล',exact:true}).click();await expect(page.getByRole('status')).toContainText('นำเข้า 1 รายการแล้ว');
   await page.getByRole('link',{name:'ดูเงินรับและต้นทุน',exact:true}).click();await expect(page.getByRole('heading',{name:'เงินรับและต้นทุน',exact:true})).toBeVisible();
   const orderRow=page.getByRole('row').filter({hasText:order});await expect(orderRow).toContainText('฿319.00');await expect(orderRow).toContainText('฿80.00');await expect(orderRow).toContainText('฿250.00');await expect(orderRow).toContainText('฿69.00');
