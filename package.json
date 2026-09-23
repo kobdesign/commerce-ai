@@ -22,7 +22,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint apps packages scripts tests --max-warnings 0",
     "test": "node --env-file-if-exists=.env scripts/test.mjs",
-    "test:e2e": "node --env-file-if-exists=.env node_modules/@playwright/test/cli.js test"
+    "test:e2e": "node --env-file-if-exists=.env node_modules/@playwright/test/cli.js test",
+    "eval:finance:readiness": "node --env-file-if-exists=.env --import tsx scripts/financial-review-eval-readiness.ts"
   },
   "dependencies": {
     "@fontsource/noto-sans-thai": "5.3.0",

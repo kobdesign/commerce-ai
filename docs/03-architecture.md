@@ -1,5 +1,7 @@
 # Architecture baseline และ decisions
 
+อัปเดต 2026-09-17: ADR-001–006 คงเป็นฐาน; ADR-007–011 เป็น target decisions ตาม [แผน Agentic Commerce](29-agentic-commerce-project-plan.md) ยังไม่ใช่ implementation ที่เปิดใช้ทั้งหมด การออกแบบนี้เพิ่ม modules ใน repo เดิมและไม่เปลี่ยน stack/hosting โดยปริยาย
+
 ## ADR-001 — Modular monolith + workers
 
 สถานะ: ใช้เป็นแนวทางของ local foundation; ความสามารถเป้าหมายในเอกสารนี้ไม่ได้หมายความว่าพัฒนาแล้วทั้งหมด ดู implementation boundary ใน [runbook](10-foundation-runbook.md)
@@ -49,7 +51,7 @@ Catalog กลางไม่ผูกกับเสื้อผ้า ProductV
 
 - การ reconcile statement/payout กับออเดอร์แยกจากการคำนวณกำไร
 - Financial events ใช้บันทึกเพิ่ม/ปรับปรุงที่มีประวัติ ไม่อ้างว่าเป็นบัญชีแยกประเภทตามกฎหมาย
-- Raw source มี lineage, checksum, adapter version และ import time; v1.1 เก็บ CSV ไม่เกิน 1 MB แบบ immutable ใน PostgreSQL สำหรับ local/staging ก่อนย้าย content ไป private object storage และกำหนด retention ก่อนรับข้อมูลจริง
+- Raw source มี lineage, checksum, adapter version และ import time; v1.1 เก็บ CSV ไม่เกิน 1 MB แบบ immutable ใน PostgreSQL และ v1.5 เพิ่ม settlement XLSX ไม่เกิน 5 MB ตาม docs/28 สำหรับ local/staging ก่อนย้าย content ไป private object storage และกำหนด retention ก่อนรับข้อมูลจริง
 - มี event/effective date, source update time, currency, timezone และ sign convention
 - เก็บ amount เป็น decimal ที่กำหนด scale หรือ minor units ตามสกุลเงิน ไม่ใช้ floating point
 - แยก actual fees, allocated ads, estimated costs และ missing inputs อย่างชัดเจน
@@ -95,6 +97,84 @@ Import และ AI runs มี queued/running/needs_review/succeeded/failed/can
 เผื่อ ActionDraft, ApprovalPolicy, ApprovalDecision, ExecutionAttempt ก่อนเปิด external write ต้องผูก approval กับ payload/version/expiry ตรวจสิทธิ์ล่าสุดและ state ล่าสุด ป้องกัน replay และออกแบบตรวจผลคำขอที่ timeout ไม่ retry blind
 
 MVP ผู้ใช้ยืนยัน mapping ผ่าน validated command และสร้างงานภายในได้ ไม่มีสิทธิ์ปรับโฆษณาหรือราคาในแพลตฟอร์มจริง
+
+## ADR-007 — Shared commands, explicit tools และ delegated identity
+
+สถานะ: target ที่เริ่มกับ command ใหม่ใน Stage B; full machine auth ต้องผ่าน AUTH-AG-01 ก่อน external/service access
+
+```mermaid
+flowchart TD
+  UI[Web UI] --> CMD[Typed commands / queries]
+  AI[Internal AI] --> TOOLS[Explicit tool allowlist]
+  MCP[Future MCP / API] --> AUTH[Authenticated delegated context]
+  AUTH --> TOOLS
+  TOOLS --> CMD
+  CMD --> POLICY[Server grants + policy]
+  POLICY --> DRAFT[Action draft / approval when required]
+  DRAFT --> CHECK[Recheck scope, payload and data version]
+  CHECK --> DOMAIN[Existing and new domain services]
+  POLICY -->|Authorized read or allowed action| DOMAIN
+  DOMAIN --> DB[(Tenant transaction + audit)]
+  DB --> OUT[Future outbox / workers]
+```
+
+- แยก command/query definitions, business executor และ transports; internal agents เรียก registry โดยตรงได้ ไม่บังคับวนผ่าน network MCP
+- Registry ไม่ expose ทุก command อัตโนมัติ ต้องระบุ tool allowlist/input/output projection/scope/risk และ tests ก่อนเปิด
+- Principal ของระบบในอนาคตผูก tenant, service/user identity, sponsor/delegation, resource grants และ credential lifecycle จาก server; ห้ามเชื่อ scopes/tenant ที่โมเดลหรือ caller ประกาศเอง
+- Effective permissions คือส่วนตัดของ principal grants, delegated scopes, shop grants, policy และสิทธิ์ปัจจุบัน; mapping จาก 5 roles เดิมไม่ยกเลิกข้อจำกัดของ Marketing/Auditor
+- เก็บผู้เสนอ ผู้อนุมัติ ผู้ดำเนินการ และ run/request IDs แยกกัน รักษา FK/attribution ของประวัติเดิมเมื่อขยาย principal model; backfill+tests ก่อนเปลี่ยน RLS ไม่คลายสิทธิ์เดิมเป็น allow-all ชั่วคราว
+- Public buyer tools รับเฉพาะ published catalog projection; merchant tools/financial evidence คนละขอบเขต แม้แชร์ domain functions
+
+## ADR-008 — Durable approvals และผลลัพธ์ที่ตรวจสอบได้
+
+สถานะ: Stage B เริ่มกับ internal review tasks ตาม docs/30; external execution ยังปิด
+
+- Draft ผูก immutable payload/hash, tenant/shop, requester/run, evidence/data version, policy version และ expiry การเปลี่ยน payload ต้อง preview/approve ใหม่
+- Approval เป็น server-authenticated record ไม่ใช่ boolean ของโมเดล; ตรวจสิทธิ์และ state ล่าสุดก่อน consumption/execution
+- Stage B ใช้ transaction เดียวสร้าง task, consume approval และ audit พร้อม scoped idempotency; manual path ใช้กฎเดียวกัน
+- Stage E แยก queued/running/succeeded/failed/unknown_outcome ของ execution attempts ออกจาก approved/rejected/expired ของ draft
+- Timeout ภายนอกต้องตรวจสถานะจาก provider ก่อน retry; ห้ามเรียกเก็บเงินหรือปรับยอดซ้ำเพราะ response หาย บันทึก provider request ID และวิธีชดเชย
+- Kill switch หยุดการเริ่มงานใหม่และตรวจซ้ำก่อน side effect; ไม่อ้างว่าย้อนงานที่ส่งไปแล้วได้ งาน in-flight ต้องตามผล/ชดเชย
+- คำว่า undo ใช้เฉพาะ action ที่ย้อนอย่างมีเงื่อนไขได้จริง การคืนเงิน ส่งสินค้า และข้อความถึงลูกค้ามี compensating process ของตนเอง
+- Risk พิจารณาประเภทผลกระทบและขอบเขตข้อมูล ไม่ถือว่าการ publish description เป็น low-risk เสมอ; ข้ออ้างสรรพคุณ/ราคา/นโยบายต้องตรวจและอนุมัติตามประเภท
+
+## ADR-009 — Inventory, orders และ financial evidence แยกหน้าที่
+
+สถานะ: target Stage C/E; ไม่มีตาราง stock/live orders ที่เปิดใช้ใน baseline นี้
+
+- คง sales_lines, financial_events, settlement และ expenses เดิม เพิ่ม live orders/order lines/events เป็นโมดูลข้างกัน การจ่ายเงินแล้วไม่เท่ากับรับเงินจริงเข้าธนาคาร
+- Canonical variant ID เป็น identity ภายใน; channel listing mapping เก็บ provider/shop/external product/variant IDs และประวัติ ไม่ใช้ชื่อสินค้าเป็นกุญแจ
+- Reconciliation ใช้ external line/transaction identity ที่ตรวจยืนยัน semantics และ namespace แล้ว `source_line_id` ต่างแหล่งไม่จำเป็นต้องตรงกัน; order+SKU ที่กำกวมเข้าคิวตรวจ ไม่ auto-match
+- Inventory เริ่มจำนวนเต็ม THB และคลังเดียว; ledger กับ materialized stock เปลี่ยนใน tx เดียว มี lock/concurrency test และ idempotent reserve/commit/release/expire
+- `available = on_hand - reserved`; ห้าม oversubscribe ภายใน การรับรู้ออเดอร์จ่ายแล้วจากภายนอกทำได้แม้ของไม่พอ แต่บันทึก shortage/unallocated และไม่สร้าง physical sale movement ที่ทำลาย invariant
+- กำหนด physical on_hand กับ allocation/fulfillment timing ก่อนเปิดจริง; ข้อเสนอเริ่มต้นคือ paid order ถือ allocation, shipping ลด physical stock; cancel ปล่อย allocation, received resalable return จึงเพิ่ม stock Payment capture ไม่ยืนยันว่าของออกจากคลังแล้ว
+- แยก payment/order/fulfillment/return/refund states รองรับ partial quantities, damaged returns และ refund-without-return; ลง financial effect ตามหลักฐานและ dedup กับ import
+- Stock authority ต่อร้าน/คลังต้องตกลงก่อนเปิด writes; sync สองทางไม่แปลว่าให้ทั้งสองระบบเขียนทับยอดกันไม่มีผู้รับผิดชอบ
+- Safety stock/debounce ลดความเสี่ยงแต่ไม่รับประกัน zero oversell; แสดง source timestamps, lag, conflicts และ read-back/reconciliation
+- เก็บต้นทุนรับเข้า/provenance เพื่อรองรับ valuation ภายหลัง; cost history เดิมยังไม่ใช่ FIFO/average การมี unit cost บาง movement ไม่รับประกัน migration valuation ได้ครบ ต้องสำรวจ opening balance/returns/adjustments และตรวจรับวิธีใหม่
+
+## ADR-010 — Reliable integration และ protocol boundaries
+
+สถานะ: target C/D/E; ใช้ worker/PostgreSQL เดิมก่อนเพิ่ม infrastructure
+
+- Transactional outbox บันทึกพร้อม business change; dispatcher/consumer มี per-consumer delivery state และ idempotency ไม่ใช้ dispatched flag เดียวแทนการส่งหลายปลายทางสำเร็จครบ
+- Incoming webhook/polling events มี inbox identity/dedup, signature verification ตาม provider, ordering/version handling และ reconciliation; cursor อย่างเดียวไม่รับประกันไม่ซ้ำ/ไม่ตกหล่น
+- Outbox เป็น at-least-once delivery; exactly-once business effect ต้องพิสูจน์ด้วย scoped uniqueness/transaction/idempotent consumers ไม่กล่าวอ้าง transport exactly-once
+- Connector แปลง provider semantics และตรวจ schema; core ตัดสิน business policy มี capability matrix แทนการสมมติทุก provider รองรับ OAuth/push/version CAS เหมือนกัน
+- `expected_version` ภายในไม่ทำให้ marketplace รองรับ compare-and-swap; ถ้า provider ไม่มี ใช้ serialize/coalesce/read-back ตามข้อจำกัดและแสดงความเสี่ยงที่เหลือ
+- แยก source/discovery, checkout channel, protocol และ payment provider; ACP/AP2/MCP มีบทบาทต่างกัน การเพิ่ม provider อาจต้องมี capability/contract เพิ่ม ไม่สัญญาว่าแก้ไฟล์เดียวเสมอ
+- Checkout/payment เป็น durable orchestration; มี persisted intent ก่อน side effect, expiry races, signed notifications, unknown payment status และ compensation/reconciliation ไม่ครอบ network call ด้วย DB transaction แล้วอ้าง rollback ทั้งระบบ
+- Catalog feed เป็น projection มี consent/version/provenance/freshness ไม่ให้ buyer API เข้าถึงตารางการเงิน/ข้อมูลลับของ merchant โดยตรง
+
+## ADR-011 — Migration และ data trust ก่อนเปิด AI financial workflow
+
+สถานะ: เริ่ม FIN-AI-01; ดู acceptance ใน docs/30
+
+- Reported payout total, derived sum, arithmetic balance, order match และ bank verification เป็นคนละมิติ ต้องเก็บ/แสดงให้แยกกัน ค่า unknown ไม่เปลี่ยนเป็น verified จากการ migrate
+- Historical raw evidence/checksum และ calculation snapshots ไม่ถูกเขียนทับ; หากเพิ่ม normalization ใช้ version ใหม่และอ้างต้นฉบับ
+- เปลี่ยน schema แบบ expand → backfill/verify → contract ภายหลัง; rehearsal กับข้อมูลเดิมและ app rollback ก่อน release ไม่สร้าง principal/inventory/order ทั้งชุดใน migration เดียว
+- เพิ่ม package เมื่อมี workflow ใช้จริง: tools/policy เริ่ม B, inventory/orders/connectors เริ่ม C, feed/API/MCP เริ่ม D; ไม่สร้าง skeleton ทั้งหมดเป็น prerequisite
+- การแยก tenant ครอบ DB, files, jobs, caches, conversation, retrieval, logs และ output ของโมเดล; cache key รวม tenant+effective authorization+data version และรองรับ revocation
 
 ## Sources ที่ใช้ประกอบ baseline
 

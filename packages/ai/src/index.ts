@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { withTenant } from '@commerce/db';
 import { catalog,assertShop,audit } from '@commerce/domain';
 import { aiInput,AppError,type Context } from '@commerce/contracts';
+export * from './finance-tools';
+export * from './settlement-review';
+export * from './review-tasks';
+export * from './settlement-evaluation';
 
 export function aiConfiguration(){return {enabled:process.env.AI_ENABLED==='true'&&!!process.env.AI_GATEWAY_API_KEY&&!!process.env.AI_MODEL,model:process.env.AI_MODEL??null};}
 export async function catalogEvidence(ctx:Context,shopId:string){
@@ -52,4 +56,4 @@ export async function executeAnalysis(ctx:Context,input:unknown){
   }
 }
 export type AiRun={id:string;mode:string;status:string;model:string|null;created_at:Date;input_tokens:number|null;output_tokens:number|null;estimated_cost_usd_micros:string|null;result:{text:string;evidence:Awaited<ReturnType<typeof catalogEvidence>>}|null};
-export async function runs(ctx:Context){return withTenant(ctx,tx=>tx.query<AiRun>('SELECT id,mode,status,model,created_at,input_tokens,output_tokens,estimated_cost_usd_micros,result FROM app.ai_runs ORDER BY created_at DESC LIMIT 10'));}
+export async function runs(ctx:Context){return withTenant(ctx,tx=>tx.query<AiRun>("SELECT id,mode,status,model,created_at,input_tokens,output_tokens,estimated_cost_usd_micros,result FROM app.ai_runs WHERE workflow_version='catalog-analysis-v1' ORDER BY created_at DESC LIMIT 10"));}

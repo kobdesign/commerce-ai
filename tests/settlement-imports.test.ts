@@ -1,10 +1,10 @@
-import { randomUUID } from 'node:crypto';
+import { createHash,randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { afterAll,describe,expect,it } from 'vitest';
 import { closePools,resolveContext,withTenant } from '@commerce/db';
 import { createProductFamily,demo } from '@commerce/domain';
 import { commitDraft,saveDraft } from '@commerce/imports';
-import { commitMarketplaceSettlement,commitSettlementImport,getSettlementImportSource,inspectMarketplaceSettlement,inspectSettlementFile,previewSettlementImport,settlementImportBatches,settlements } from '@commerce/finance';
+import { commitMarketplaceSettlement,commitSettlementImport,getSettlementImportSource,inspectMarketplaceSettlement,inspectSettlementFile,previewSettlementImport,settlementImportBatches,settlements,reverseSettlementLine } from '@commerce/finance';
 
 afterAll(closePools);
 const today=new Date().toISOString().slice(0,10);
@@ -113,4 +113,71 @@ describe('Settlement CSV imports',()=>{
     await expect(commitMarketplaceSettlement(ctx,{...input,adapterKey:'shopee-th',confirmedStatement:true})).rejects.toMatchObject({code:'SETTLEMENT_IMPORT_HAS_ERRORS'});
     const auditor=await resolveContext(demo.users.consultant,demo.tenants.chino);await expect(inspectMarketplaceSettlement(auditor,input)).rejects.toMatchObject({status:403});
   });
+  it('FA-T01 keeps a derived 600 + 400 total unverified through preview, commit, replay and reversal',async()=>{
+    const {ctx,orders}=await sales([60000,40000]),payout=`DERIVED-${randomUUID()}`;
+    const csv=`Payout ID,Order ID,Release Date,Transaction ID,Released Amount
+${payout},${orders[0]},${today},D-${randomUUID()},600.00
+${payout},${orders[1]},${today},D-${randomUUID()},400.00
+`;
+    const input={shopId:demo.shops.tiktok,filename:'shopee-derived.csv',contentType:'text/csv' as const,contentBase64:Buffer.from(csv).toString('base64'),adapterKey:'shopee-th' as const};
+    const before=(await settlements(ctx,input.shopId)).summary;
+    const inspected=await inspectMarketplaceSettlement(ctx,input);if(!inspected.detected)throw new Error('adapter not detected');
+    expect(inspected.preview).toMatchObject({valid:2,balancedPayoutCount:0});
+    expect(inspected.preview.payouts[0]).toMatchObject({payoutTotalBasis:'derived_from_lines',payoutTotalMinor:100000,allocatedMinor:100000,differenceMinor:0,reconciliationComplete:false});
+    const saved=await commitMarketplaceSettlement(ctx,{...input,confirmedStatement:true});
+    await expect(commitMarketplaceSettlement(ctx,{...input,confirmedStatement:true})).resolves.toMatchObject({id:saved.id,duplicate:true});
+    const ledger=await settlements(ctx,input.shopId);
+    expect(ledger.payouts.find(row=>row.payoutReference===payout)).toMatchObject({payoutTotalBasis:'derived_from_lines',arithmeticBalanced:true,reconciliationComplete:false,unmatchedLineCount:0});
+    expect(ledger.summary.reportedPayoutMinor).toBe(before.reportedPayoutMinor);
+    expect(ledger.summary.balancedPayoutCount).toBe(before.balancedPayoutCount);
+    expect(ledger.summary.derivedPayoutCount).toBe(before.derivedPayoutCount+1);
+    const source=await getSettlementImportSource(ctx,saved.id);expect(source.content.toString()).toBe(csv);
+    const original=ledger.items.find(row=>row.importBatchId===saved.id)!;
+    const reversed=await reverseSettlementLine(ctx,original.id,{shopId:input.shopId,note:'ทดสอบแก้กลับ',confirmedCorrection:true});
+    const after=await settlements(ctx,input.shopId);
+    expect(after.items.find(row=>row.id===reversed.id)?.payoutTotalBasis).toBe('derived_from_lines');
+    expect(after.payouts.find(row=>row.payoutReference===payout)?.reconciliationComplete).toBe(false);
+  });
+
+  it('FA-T02 compares a reported 1,200 against allocations of 1,000 without calling it balanced',async()=>{
+    const {ctx,orders}=await sales([60000,40000]),payout=`REPORTED-${randomUUID()}`;
+    const input=statement(orders,{csv:`payout_reference,settled_on,payout_total,source_line_id,order_id,allocation_amount,note
+${payout},${today},1200.00,R-${randomUUID()},${orders[0]},600.00,reported total
+${payout},${today},1200.00,R-${randomUUID()},${orders[1]},400.00,reported total
+`});
+    const preview=await previewSettlementImport(ctx,input);
+    expect(preview.payouts[0]).toMatchObject({payoutTotalBasis:'reported_total',differenceMinor:-20000,reconciliationComplete:false});
+    await commitSettlementImport(ctx,{...input,confirmedStatement:true});
+    expect((await settlements(ctx,input.shopId)).payouts.find(row=>row.payoutReference===payout)).toMatchObject({payoutTotalMinor:120000,allocatedMinor:100000,differenceMinor:-20000,payoutTotalBasis:'reported_total',arithmeticBalanced:false,reconciliationComplete:false});
+  });
+
+  it('classifies blank total cells as derived and mixed row origins as unknown',async()=>{
+    const {ctx,orders}=await sales([60000,40000]),payout=`BLANK-${randomUUID()}`;
+    const csv=`Payout ID,Order ID,Release Date,Total Released Amount,Transaction ID,Released Amount
+${payout},${orders[0]},${today},1000.00,B-${randomUUID()},600.00
+${payout},${orders[1]},${today},,B-${randomUUID()},400.00
+`;
+    const input={shopId:demo.shops.tiktok,filename:'shopee-blank.csv',contentType:'text/csv' as const,contentBase64:Buffer.from(csv).toString('base64'),adapterKey:'shopee-th' as const};
+    const result=await inspectMarketplaceSettlement(ctx,input);if(!result.detected)throw new Error('adapter not detected');
+    expect(result.preview.rows.map(row=>row.payoutTotalBasis)).toEqual(['reported_total','derived_from_lines']);
+    expect(result.preview.rows[1].warnings.join(' ')).toContain('ยังไม่ยืนยันยอดโอน');
+    expect(result.preview.payouts[0]).toMatchObject({payoutTotalBasis:'unknown',reconciliationComplete:false});
+    await commitMarketplaceSettlement(ctx,{...input,confirmedStatement:true});
+    expect((await settlements(ctx,input.shopId)).payouts.find(row=>row.payoutReference===payout)?.payoutTotalBasis).toBe('unknown');
+    await expect(inspectMarketplaceSettlement(ctx,{...input,payoutTotalBasis:'reported_total'})).rejects.toThrow();
+  });
+
+  it('replays an immutable v1 batch without upgrading its historical evidence or importing twice',async()=>{
+    const {ctx,orders}=await sales(),input=statement(orders),id=randomUUID(),bytes=Buffer.from(input.csv),sourceHash=createHash('sha256').update(bytes).digest('hex');
+    const fingerprint=createHash('sha256').update(JSON.stringify([sourceHash,input.delimiter,...['payoutReference','settledOn','payoutTotal','sourceLineId','orderId','amount'].map(field=>input.mapping[field as keyof typeof input.mapping]),input.mapping.note,'settlement-preview-v1'])).digest('hex');
+    const legacyPreview={total:2,payoutCount:1,unmatchedLineCount:0,legacy:true};
+    await withTenant(ctx,tx=>tx.query(`INSERT INTO app.settlement_import_batches(tenant_id,id,shop_id,actor_id,filename,byte_size,source_hash,fingerprint,delimiter,adapter_key,schema_version,parser_version,mapping,preview,content)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,',','generic-settlement-lines','generic-settlement-lines-v1','settlement-preview-v1',$9,$10,$11)`,[ctx.tenantId,id,input.shopId,ctx.userId,input.filename,bytes.length,sourceHash,fingerprint,JSON.stringify(input.mapping),JSON.stringify(legacyPreview),bytes]));
+    await expect(commitSettlementImport(ctx,{...input,confirmedStatement:true})).resolves.toMatchObject({id,duplicate:true});
+    const [batch]=await withTenant(ctx,tx=>tx.query<{preview:typeof legacyPreview;parser_version:string}>('SELECT preview,parser_version FROM app.settlement_import_batches WHERE id=$1',[id]));
+    expect(batch).toEqual({preview:legacyPreview,parser_version:'settlement-preview-v1'});
+    expect((await getSettlementImportSource(ctx,id)).content.equals(bytes)).toBe(true);
+    expect(await withTenant(ctx,tx=>tx.query('SELECT id FROM app.settlement_lines WHERE import_batch_id=$1',[id]))).toHaveLength(0);
+  });
+
 });

@@ -1,6 +1,8 @@
 import { z } from 'zod';
 export const roles = ['owner','finance','operator','marketing','auditor'] as const;
 export type Role = typeof roles[number];
+export const payoutTotalBases = ['reported_total','derived_from_lines','unknown'] as const;
+export type PayoutTotalBasis = typeof payoutTotalBases[number];
 export const uuid = z.string().uuid();
 export const nameSchema = z.string().trim().min(1).max(100);
 export const shopInput = z.object({name:nameSchema, channel:z.enum(['tiktok','shopee','lazada','direct'])}).strict();

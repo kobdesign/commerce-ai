@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { parse } from 'csv-parse/sync';
 import readXlsxFile from 'read-excel-file/node';
-import { AppError } from '@commerce/contracts';
+import { AppError,type PayoutTotalBasis } from '@commerce/contracts';
 
 export const marketplaceSettlementAdapters=['tiktok-shop-th','shopee-th','lazada-th'] as const;
 export type MarketplaceSettlementAdapterKey=typeof marketplaceSettlementAdapters[number];
@@ -11,7 +11,7 @@ export type MarketplaceSettlementSource={
 };
 export type MarketplaceSettlementRow={
   payoutReference:string;settledOn:string;payoutTotal:string;sourceLineId:string;orderId:string;amount:string;note:string;
-  errors:string[];warnings:string[];
+  payoutTotalBasis:PayoutTotalBasis;errors:string[];warnings:string[];
 };
 export type ParsedMarketplaceSettlement={
   adapterKey:MarketplaceSettlementAdapterKey;adapterLabel:string;schemaVersion:string;confidence:'exact'|'compatible';sheetName:string;
@@ -183,11 +183,11 @@ export async function parseMarketplaceSettlement(source:MarketplaceSettlementSou
   const rows=rawRows.map(({raw:_,...row}):MarketplaceSettlementRow=>{
     const errors:string[]=[],warnings:string[]=[];
     if(positions.payoutReference<0)warnings.push('รหัสรอบโอนสร้างจากแพลตฟอร์มและวันที่ชำระเงิน');
-    if(positions.payoutTotal<0)warnings.push('ยอดโอนรวมคำนวณจากรายการทั้งหมดในรอบนี้');
+    if(!row.payoutTotal)warnings.push('ยอดรวมคำนวณจากรายการในไฟล์ ยังไม่ยืนยันยอดโอน');
     if(positions.sourceLineId<0)warnings.push('รหัสบรรทัดสร้างจาก checksum ของข้อมูลต้นทาง');
     const value=signedMinor(row.amount);if(value!==null&&value<=0)errors.push('รายการยอดติดลบหรือศูนย์ต้องแยกเป็นค่าธรรมเนียมหรือรายการปรับยอดก่อนนำเข้า');
     if(/adjustment|reserve|withdraw|refund|fee|commission|ค่าธรรมเนียม|คืนเงิน|สำรอง|ปรับยอด/i.test(row.note))errors.push('ประเภทรายการนี้ต้องเข้ากระบวนการค่าธรรมเนียม คืนเงิน หรือปรับยอด ไม่ใช่เงินรับคำสั่งซื้อ');
-    return {...row,payoutTotal:row.payoutTotal||minorText(totals.get(row.payoutReference)??0),errors,warnings};
+    return {...row,payoutTotalBasis:row.payoutTotal?'reported_total':'derived_from_lines',payoutTotal:row.payoutTotal||minorText(totals.get(row.payoutReference)??0),errors,warnings};
   });
   return {adapterKey:definition.key,adapterLabel:definition.label,schemaVersion:definition.schemaVersion,confidence:match.signature>=3?'exact':'compatible',sheetName:table.sheetName,rows,sourceHash:createHash('sha256').update(bytes).digest('hex'),sourceBytes:bytes,contentType:source.contentType,delimiter:source.contentType==='text/csv'?(source.delimiter??','):null,notices};
 }
