@@ -22,10 +22,10 @@ export type MarketplaceDetectionMiss={detected:false;headers:string[];sample:str
 
 type Cell=string|number|boolean|Date|null;
 type Table={sheetName:string;rows:Cell[][]};
-type CanonicalColumn='payoutReference'|'settledOn'|'payoutTotal'|'sourceLineId'|'orderId'|'amount'|'note';
+export type MarketplaceSettlementColumn='payoutReference'|'settledOn'|'payoutTotal'|'sourceLineId'|'orderId'|'amount'|'note';
 type AdapterDefinition={
   key:MarketplaceSettlementAdapterKey;label:string;schemaVersion:string;filenameHints:string[];signatures:string[][];
-  columns:Record<CanonicalColumn,string[]>;
+  columns:Record<MarketplaceSettlementColumn,string[]>;
 };
 
 const maxCsvBytes=1_048_576,maxXlsxBytes=5_242_880,maxRows=1000,maxColumns=80,maxSheets=12,maxCells=60_000;
@@ -73,6 +73,12 @@ const definitions:AdapterDefinition[]=[
 
 function fail(message:string):never{throw new AppError(400,'INVALID_MARKETPLACE_STATEMENT',message);}
 function normalized(value:unknown){return String(value??'').normalize('NFKC').replace(/^\uFEFF/,'').trim().replace(/\s+/g,' ').toLowerCase();}
+export function marketplaceSettlementHeaderRole(value:string,adapterKey?:MarketplaceSettlementAdapterKey):MarketplaceSettlementColumn|null{
+  const header=normalized(value);if(header==='order/adjustment id')return 'orderId';
+  const candidates=adapterKey?definitions.filter(definition=>definition.key===adapterKey):definitions;
+  for(const definition of candidates)for(const [role,aliases] of Object.entries(definition.columns) as [MarketplaceSettlementColumn,string[]][])if(aliases.some(alias=>normalized(alias)===header))return role;
+  return null;
+}
 function cellText(value:Cell){
   if(value===null)return '';
   if(value instanceof Date)return value.toISOString().slice(0,10);
@@ -165,7 +171,7 @@ export async function parseMarketplaceSettlement(source:MarketplaceSettlementSou
   const allTables=await tables(source,bytes),match=findAdapter(allTables,source.filename,source.adapterKey);
   if(!match){if(source.adapterKey)fail('หัวคอลัมน์ไม่ตรงกับตัวอ่านของแพลตฟอร์มที่เลือก');return firstTableSummary(allTables);}
   const {definition,table,header}=match;if(!tableShape(table))fail(`ชีต ${table.sheetName} ต้องมีข้อมูล 1–${maxRows} แถว และไม่เกิน ${maxColumns} คอลัมน์`);
-  const headers=header.headers,positions=Object.fromEntries((Object.keys(definition.columns) as CanonicalColumn[]).map(key=>[key,column(headers,definition.columns[key])])) as Record<CanonicalColumn,number>;
+  const headers=header.headers,positions=Object.fromEntries((Object.keys(definition.columns) as MarketplaceSettlementColumn[]).map(key=>[key,column(headers,definition.columns[key])])) as Record<MarketplaceSettlementColumn,number>;
   if(positions.orderId<0||positions.settledOn<0||positions.amount<0)fail(`ไฟล์ ${definition.label} ไม่มีคอลัมน์คำสั่งซื้อ วันที่ชำระเงิน หรือยอดเงินที่จำเป็น`);
   const data=table.rows.slice(header.index+1).filter(row=>row.some(value=>cellText(value)!==''));
   if(!data.length||data.length>maxRows)fail(`รองรับข้อมูล 1–${maxRows} รายการต่อไฟล์`);
@@ -174,7 +180,7 @@ export async function parseMarketplaceSettlement(source:MarketplaceSettlementSou
   if(positions.payoutTotal<0)notices.push('ไฟล์ไม่มียอดรวมต่อรอบ ระบบจึงรวมยอดจากรายการในไฟล์');
   if(positions.sourceLineId<0)notices.push('ไฟล์ไม่มีรหัสธุรกรรม ระบบจึงสร้างรหัสคงที่จากข้อมูลแต่ละบรรทัด');
   const rawRows=data.map(row=>{
-    const read=(key:CanonicalColumn)=>positions[key]>=0?cellText(row[positions[key]]):'';
+    const read=(key:MarketplaceSettlementColumn)=>positions[key]>=0?cellText(row[positions[key]]):'';
     const settledOn=isoDate(read('settledOn')),amount=decimal(read('amount'));
     return {raw:row,payoutReference:read('payoutReference')||`${definition.key.toUpperCase()}-${settledOn}`,settledOn,payoutTotal:decimal(read('payoutTotal')),sourceLineId:read('sourceLineId')||derivedId(definition.key,table.sheetName,row),orderId:read('orderId'),amount,note:read('note')||`${definition.label} · ${table.sheetName}`};
   });

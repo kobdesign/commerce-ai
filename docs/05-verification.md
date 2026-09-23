@@ -1,6 +1,6 @@
 # Verification และ AI evaluation
 
-ผลรอบ v1.10: integration/regression 97/97 และ browser E2E 26/26 ผ่าน รวม deterministic evidence, mocked provider failure, human confirmation, task persistence และ role boundary รายละเอียดอยู่ใน [ผลประเมินและ UAT readiness](35-financial-ai-evaluation-and-uat.md) การตรวจ live model และ finance UAT ยังไม่เกิดขึ้นเพราะยังไม่มีค่าตั้ง provider/threshold ที่อนุมัติ
+ผลรอบ v1.11: integration/regression 105/105 ผ่าน; browser E2E ล่าสุด 26/26 ผ่าน ชุด DATA-AG-01 เพิ่มการตรวจ redaction, deterministic pseudonym, adapter detection ทั้งสาม platform, PII-safe report และ checksum-bound finance sign-off รายละเอียดอยู่ใน [ผลส่งมอบ v1.11](36-statement-sample-intake.md) การตรวจ export จริง, live model และ finance UAT ยังรอ input/decision ที่เกี่ยวข้อง
 
 เอกสารนี้กำหนดเกณฑ์ตรวจต่อเนื่อง ผลที่ผ่านจริงของแต่ละรุ่นอยู่ในเอกสารส่งมอบ เช่น [หลักฐานไฟล์ต้นฉบับ v1.1](24-import-source-evidence.md) ข้อมูลทดสอบยังเป็น synthetic และไม่ใช่ schema ทางการของ marketplace
 

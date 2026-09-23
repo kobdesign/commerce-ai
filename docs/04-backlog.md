@@ -11,7 +11,7 @@
 | ID | Stage / งาน | Priority / สถานะ | Depends on | Owner ที่เสนอ | เกณฑ์ตรวจรับ |
 |---|---|---|---|---|---|
 | PLAN-AG-01 | ปรับ vision/ADR/requirements/backlog | P0 / จัดทำแผนแล้ว | คำขอผู้ใช้ | Product + Engineering | docs/01–06,29–30 สอดคล้อง; runtime ไม่เปลี่ยน |
-| DATA-AG-01 | ตรวจ Statement จริงและ golden cases ต่อ platform/version | P0 / Pending input | DEC-02; ต่อ DISC-01/02, CON-01 | ร้าน + การเงิน + Engineering | ยืนยันยอด/semantics/sign/date/identity; fixture ปกปิดข้อมูล; sign-off ช่องทางที่จะ pilot |
+| DATA-AG-01 | ตรวจ Statement จริงและ golden cases ต่อ platform/version | P0 / Intake tooling ready; Pending real samples + finance sign-off | DEC-02; ต่อ DISC-01/02, CON-01 | ร้าน + การเงิน + Engineering | secure CSV pseudonymization + review/sign-off contract ผ่าน synthetic ทุก adapter; ยังต้องยืนยันยอด/semantics/sign/date/identity จาก export จริง |
 | FIN-AI-01 | แยก reported/derived/unknown และข้อจำกัดการกระทบยอด | P0 / เสร็จและตรวจ synthetic ใน local | PLAN-AG-01; ต่อ FIN-01/02 | Engineering + การเงิน | FA-T01/02 ผ่าน; migration rehearsal และ raw evidence ตาม docs/31; ยังไม่ production-verified |
 | FIN-AI-02 | Financial read tools + evidence contract | P0 / Complete (local synthetic) | FIN-AI-01; ต่อ AI-03 | Engineering | 84 integration tests; ผลส่งมอบ docs/32; ยังไม่ใช่ live model/UAT |
 | FIN-AI-03 | Summary ตามบริบท + manual fallback + run metadata | P0 / Done (local) | FIN-AI-02; ต่อ AI-01/03 | Engineering + Product | FA-T04/05/09/10 ผ่าน mocked-model + system E2E; live eval อยู่ FIN-AI-05 |
@@ -29,7 +29,7 @@
 | AUTO-AG-01 | Listing/operations/external writes แบบจำกัดขอบเขต | P2 / Planned | AUTH-AG-01, CON-API-01, ADR-008 + use-case UAT | Engineering + Product | AG-T03/10/11; approval/current state/kill switch; วัดผลจริงก่อนเพิ่ม autonomy |
 | ENT-AG-01 | Enterprise gap assessment และ readiness ตามลูกค้า | P1 / Planned | DEC-01/03; ต่อ ENT-01/02 | Product + Engineering | Requirement-cost matrix, separation of duties, SSO/SCIM/DR ก่อนขายฟีเจอร์นั้น |
 
-งาน implementation ถัดไป: **DATA-AG-01 / REL-AG-01 readiness** หลัง [FIN-AI-05 ผ่าน technical gate ใน local](35-financial-ai-evaluation-and-uat.md) โดยเก็บ Statement ที่ปกปิดข้อมูล กำหนด data/model policy, usefulness/latency/cost thresholds และนัดผู้ใช้การเงินทำ UAT ก่อน production pilot
+งานถัดไป: ใช้ [DATA-AG-01 intake tooling](36-statement-sample-intake.md) กับ export จริงอย่างน้อยหนึ่งชุดต่อ platform/version และให้ผู้ใช้การเงินลงผล จากนั้นทำ **REL-AG-01** ด้าน identity, private storage/lifecycle, restore, monitoring และ DEC-04 ก่อน production pilot
 
 ## Baseline backlog เดิม — เก็บเพื่ออ้างอิง
 

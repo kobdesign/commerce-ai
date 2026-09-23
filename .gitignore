@@ -8,4 +8,7 @@ playwright-report/
 test-results/
 artifacts/
 coverage/
+private-data/
+*.review.local.json
+*.acceptance.local.json
 .DS_Store
