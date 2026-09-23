@@ -2,9 +2,25 @@
 
 ชื่อชั่วคราวสำหรับโครงการช่วยร้านค้าออนไลน์ตรวจเงินรับและกำไร มี AI ในกระบวนการทำงาน รองรับหลายองค์กร และมีเส้นทางขยายสู่ Enterprise
 
-สถานะ: **Product workflow v1.4 — เว็บแอป, import worker และ PostgreSQL พร้อมเตรียม staging บน Render**
+**ทิศทางโครงการล่าสุด — 17 กันยายน 2026:** ต่อฐาน financial evidence ไปสู่ AI ช่วยงานร้าน และการเปิดช่องทางขายผ่าน AI แบบเป็นช่วง ดู [แผน Agentic Commerce](docs/29-agentic-commerce-project-plan.md), [active backlog](docs/04-backlog.md) และ [slice ถัดไป: AI ช่วยตรวจเงินและสร้างงานติดตาม](docs/30-financial-review-assistant-slice.md) เป็นแผนพัฒนา ยังไม่มี inventory/live orders/API connectors/checkout เปิดใช้จากการปรับเอกสารครั้งนี้
 
-มี login, หลายบริษัท/ร้าน, catalog หลายประเภทสินค้า, รายละเอียดที่เพิ่มเองได้, หลาย SKU ต่อสินค้า, แก้ไขรายละเอียด/ราคา/ต้นทุนพร้อมประวัติ, สิทธิ์รายบทบาท/ร้าน, audit, AI tool preview, flow ตรวจรายการขายและส่งยืนยันให้ worker ทำต่อเบื้องหลัง, หลักฐานไฟล์ต้นฉบับพร้อม checksum, source line identity ป้องกันยอดซ้ำข้ามไฟล์, Review Inbox สำหรับยืนยันต้นทุนที่ขาด, refund/fee rebate, การนำเข้าและกระทบยอด statement ต่อรอบโอนและคำสั่งซื้อ และบัญชีค่าใช้จ่ายร้านแบบ append-only พร้อมการแก้กลับโดยไม่ลบหลักฐานแล้ว ข้อมูลเริ่มต้นเป็นข้อมูลสมมติ ตัวเลข “เงินเหลือหลังค่าใช้จ่ายที่บันทึก” ยังไม่ใช่กำไรสุทธิหรือระบบ production/Enterprise ที่ตรวจรับแล้ว การสร้างทรัพยากร Render จริงต้องตรวจราคาและยืนยันใน Render Dashboard ก่อน
+สถานะ: **Product workflow v1.11 — เพิ่ม secure intake สำหรับ Statement จริงที่ปกปิดข้อมูลและ finance sign-off**
+
+งาน FIN-AI-01 และผลตรวจล่าสุด: [ที่มาของยอดรวมกระทบยอด v1.6](docs/31-settlement-total-provenance.md) — แยกยอดตาม Statement / ยอดที่ระบบรวมเอง / unknown; ไม่ใช้ยอดที่รวมเองยืนยันยอดโอน
+
+งาน FIN-AI-02: [เครื่องมืออ่านการเงินพร้อมหลักฐาน v1.7](docs/32-financial-read-tools.md) — จำกัดร้าน/ช่วงเวลา/จำนวนผล แยกเวลาต้นทางและที่มาของยอด ไม่ส่ง raw file หรือหมายเหตุให้โมเดล และไม่มี write tool
+
+งาน FIN-AI-03: [ผู้ช่วยสรุปการกระทบยอด v1.8](docs/33-settlement-review-assistant.md) — สรุปจากระบบได้แม้ไม่มีโมเดล, AI จัดลำดับได้เฉพาะ evidence ID ที่มีจริง และบันทึก workflow/prompt/tool/policy versions พร้อม usage/status
+
+งาน FIN-AI-04: [งานติดตามที่ผู้ใช้ยืนยัน v1.9](docs/34-human-confirmed-financial-review-tasks.md) — draft หมดอายุและตรวจ evidence hash ซ้ำ, confirmation/task/audit เป็น atomic, กันยืนยันและงานเปิดซ้ำ และแยก lifecycle งานออกจากตัวเลขกระทบยอด
+
+งาน FIN-AI-05: [ผลประเมินและ UAT readiness v1.10](docs/35-financial-ai-evaluation-and-uat.md) — ชุดกรณีประเมินแบบมีเวอร์ชัน, automated grounding/safety gates, flow browser → API → DB และแบบตรวจรับโดยผู้ใช้การเงินจริง; live model/UAT ยังรอ DEC-04 และผู้ตรวจ
+
+งาน DATA-AG-01 readiness: [เครื่องมือเตรียมและตรวจรับ Statement v1.11](docs/36-statement-sample-intake.md) — แทนรหัสคำสั่งซื้อ/ธุรกรรมแบบคงที่, ลบค่าคอลัมน์อื่น, ตรวจ PII โดยไม่พิมพ์ค่าดิบ และผูก finance sign-off กับ checksum ของไฟล์ที่ตรวจจริง
+
+มี login, หลายบริษัท/ร้าน, catalog หลายประเภทสินค้า, รายละเอียดที่เพิ่มเองได้, หลาย SKU ต่อสินค้า, แก้ไขรายละเอียด/ราคา/ต้นทุนพร้อมประวัติ, สิทธิ์รายบทบาท/ร้าน, audit, AI tool preview, flow ตรวจรายการขายและส่งยืนยันให้ worker ทำต่อเบื้องหลัง, หลักฐานไฟล์ต้นฉบับพร้อม checksum, source line identity ป้องกันยอดซ้ำข้ามไฟล์, Review Inbox สำหรับยืนยันต้นทุนที่ขาด, refund/fee rebate, การนำเข้าและกระทบยอด statement ต่อรอบโอนและคำสั่งซื้อ, ตัวอ่าน CSV/XLSX แบบมีเวอร์ชันสำหรับ TikTok Shop/Shopee/Lazada และบัญชีค่าใช้จ่ายร้านแบบ append-only พร้อมการแก้กลับโดยไม่ลบหลักฐานแล้ว ข้อมูลเริ่มต้นเป็นข้อมูลสมมติ ตัวเลข “เงินเหลือหลังค่าใช้จ่ายที่บันทึก” ยังไม่ใช่กำไรสุทธิหรือระบบ production/Enterprise ที่ตรวจรับแล้ว การสร้างทรัพยากร Render จริงต้องตรวจราคาและยืนยันใน Render Dashboard ก่อน
+
+ตัวอ่าน statement แยกแพลตฟอร์มและการตรวจจับอัตโนมัติ: [Product workflow v1.5](docs/28-marketplace-settlement-adapters.md)
 
 การนำเข้า statement หลายบรรทัดจาก CSV พร้อม preview และหลักฐานต้นฉบับ: [Product workflow v1.4](docs/27-settlement-csv-import.md)
 
@@ -53,7 +69,7 @@ npm run dev
 
 คู่มือคำสั่ง บัญชีทดสอบ ขอบเขตฟีเจอร์และข้อจำกัด: [Foundation runbook](docs/10-foundation-runbook.md)
 
-ผลตรวจล่าสุด: **72 integration tests และ 20 browser tests ผ่าน** รวม settlement CSV import, settlement reconciliation, durable import jobs, raw source evidence, shop expense ledger และ health check สำหรับ staging ดู [ผลตรวจ v1.4](docs/27-settlement-csv-import.md), [Render staging readiness](docs/21-render-staging.md) หรือ [Business Logic verification](docs/15-business-logic-verification.md)
+ผลตรวจรอบ v1.11: **105 integration/regression tests ผ่าน** และ browser E2E ล่าสุด **26/26 ผ่าน** ชุดใหม่ตรวจ redaction/intake/sign-off ของ TikTok, Shopee และ Lazada ดู [ผลส่งมอบ v1.11](docs/36-statement-sample-intake.md) ข้อมูล marketplace ที่ใช้ใน automated tests ยังเป็น synthetic
 
 เอกสารอ้างอิงบทสนทนาของผู้ใช้ ข้อมูลร้านจริงและเทคโนโลยีที่ทีมถนัดยังรอยืนยัน ตัวอย่างทั้งหมดที่ติดป้าย synthetic ไม่ใช่ข้อมูลร้านหรือรูปแบบไฟล์ทางการของแพลตฟอร์ม
 
@@ -75,15 +91,17 @@ npm run dev
 
 องค์กรที่ได้รับอนุญาตนำเข้าข้อมูล → ตรวจคุณภาพและ mapping → จับคู่รายการเงิน → คำนวณเงินเหลือ → AI อธิบายพร้อมหลักฐาน → ผู้ใช้จัดการรายการที่ต้องตรวจ
 
-เริ่มจากรายงาน TikTok ของร้านแฟน ผ่านไฟล์จริงที่ร้านดาวน์โหลดได้ รูปแบบไฟล์และความครบถ้วนต้องสำรวจก่อนเขียน adapter ส่วน Shopee/Lazada ใช้สัญญา adapter เดียวกันในระยะถัดไป
+เริ่มจากรายงาน TikTok ของร้านแฟน ผ่านไฟล์จริงที่ร้านดาวน์โหลดได้ Adapter contract สำหรับ TikTok/Shopee/Lazada และตัวอย่างสมมติมีแล้ว แต่รูปแบบและความครบถ้วนยังต้องตรวจรับกับ export จริงที่ปกปิดข้อมูลส่วนตัว
 
 Product model เป็นกลางต่อหมวดสินค้า กางเกงเป็น pilot แรก เวอร์ชันแรกวางแผนรองรับสินค้าทางกายภาพที่ขายเป็นหน่วยนับและมีต้นทุนอ้างอิงได้ ทั้งมีและไม่มีตัวเลือก ข้อมูลสี/ไซซ์เป็น attributes; batch/expiry, serial, หน่วยชั่งตวง, bundle components และ subscription เป็นความสามารถขยายที่ต้องตรวจรับแยก
 
 ## งานถัดจาก Foundation
 
-- ทำ discovery จากงานจริงและรายงานที่ตัดข้อมูลส่วนบุคคลไม่จำเป็นออก
-- ยืนยันสูตรและความหมายของข้อมูลกับผู้ดูแลการเงิน
-- ใช้ TypeScript / Next.js / PostgreSQL เป็นฐานที่ติดตั้งแล้ว และยืนยันข้อจำกัดการให้บริการก่อน production
-- ตรวจ schema รายงาน TikTok จริง แล้วเชื่อม adapter เข้าสัญญา order/settlement กลางที่มีอยู่ → รายงานค่าโฆษณา → ตรวจสูตรจากข้อมูลจริง โดยคงชุดทดสอบ Tenant A/B
+- **FIN-AI-01 ส่งมอบใน local แล้ว:** แยกยอดรวมตามต้นทางออกจากยอดที่รวมจากบรรทัดเอง และสถานะที่หลักฐานยังไม่พอ ก่อนให้ AI อธิบายผล
+- **FIN-AI-02 ส่งมอบใน local แล้ว:** เครื่องมืออ่านการเงินตามสิทธิ์พร้อม evidence contract และข้อจำกัด โดยยังไม่เรียกโมเดลหรือเขียนข้อมูล
+- **FIN-AI-05 ผ่าน technical gate ใน local:** automated synthetic/mock eval และ full-flow regression พร้อมแล้ว; human-graded live-model eval และ finance UAT รอ model/data policy, threshold และผู้ตรวจตาม DEC-04
+- **DATA-AG-01 มี intake tooling แล้ว:** รอ export จริงที่ร้านปกปิดด้วยเครื่องมือและผู้ใช้การเงินตรวจยอด/semantics ก่อนรับรอง adapter ของแต่ละ platform/version
+- **REL-AG-01:** Production identity, data lifecycle, restore, model/data policy และ budget ก่อน pilot จริง
+- Inventory/orders/connectors, published catalog/MCP และ checkout อยู่ stage ถัดไปตามเกณฑ์ ไม่เป็น dependency ทั้งชุดของ AI ตรวจเงิน
 
 ไม่มีกำหนดส่งที่ยืนยันแล้ว รอบพัฒนาเป็นลำดับงาน ไม่ใช่คำสัญญาระยะเวลา

@@ -22,7 +22,10 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint apps packages scripts tests --max-warnings 0",
     "test": "node --env-file-if-exists=.env scripts/test.mjs",
-    "test:e2e": "node --env-file-if-exists=.env node_modules/@playwright/test/cli.js test"
+    "test:e2e": "node --env-file-if-exists=.env node_modules/@playwright/test/cli.js test",
+    "eval:finance:readiness": "node --env-file-if-exists=.env --import tsx scripts/financial-review-eval-readiness.ts",
+    "data:prepare-statement": "node --env-file-if-exists=.env --import tsx scripts/prepare-settlement-sample.ts",
+    "data:verify-statement": "node --env-file-if-exists=.env --import tsx scripts/verify-settlement-sample.ts"
   },
   "dependencies": {
     "@fontsource/noto-sans-thai": "5.3.0",
@@ -35,6 +38,7 @@
     "pg-boss": "12.32.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "read-excel-file": "9.3.10",
     "zod": "4.6.5"
   },
   "devDependencies": {

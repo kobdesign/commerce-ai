@@ -18,7 +18,7 @@ async function sale(amounts=[31900]){
   return {ctx,orderId};
 }
 function line(orderId:string,payoutReference=`PAYOUT-${randomUUID()}`,amountMinor=31900,payoutTotalMinor=amountMinor,sourceLineId=`PAYOUT-LINE-${randomUUID()}`){
-  return {shopId:demo.shops.tiktok,sourceLineId,payoutReference,orderId,settledOn:today,payoutTotalMinor,amountMinor,note:'Statement เงินโอนจากแพลตฟอร์ม',confirmedStatement:true as const};
+  return {shopId:demo.shops.tiktok,sourceLineId,payoutReference,orderId,settledOn:today,payoutTotalMinor,payoutTotalBasis:'reported_total' as const,amountMinor,note:'Statement เงินโอนจากแพลตฟอร์ม',confirmedStatement:true as const};
 }
 
 describe('Settlement reconciliation',()=>{
@@ -82,4 +82,26 @@ describe('Settlement reconciliation',()=>{
     await expect(withTenant(ctx,tx=>tx.query('UPDATE app.settlement_lines SET amount_minor=1 WHERE id=$1',[saved.id]))).rejects.toMatchObject({code:'42501'});
     await expect(withTenant(ctx,tx=>tx.query('DELETE FROM app.settlement_lines WHERE id=$1',[saved.id]))).rejects.toMatchObject({code:'42501'});
   });
+  it('keeps unclassified legacy-style rows unresolved even when arithmetic and orders match',async()=>{
+    const {ctx,orderId}=await sale(),input=line(orderId),id=randomUUID();
+    await withTenant(ctx,tx=>tx.query(`INSERT INTO app.settlement_lines(tenant_id,id,shop_id,source_line_id,payout_reference,order_id,settled_on,payout_total_minor,amount_minor,source_scope,note,actor_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8,'settlement_statement','Legacy statement',$9)`,[ctx.tenantId,id,input.shopId,input.sourceLineId,input.payoutReference,orderId,today,input.amountMinor,ctx.userId]));
+    const ledger=await settlements(ctx,input.shopId);
+    expect(ledger.payouts.find(row=>row.payoutReference===input.payoutReference)).toMatchObject({payoutTotalBasis:'unknown',arithmeticBalanced:true,reconciliationComplete:false,unmatchedLineCount:0});
+    expect(ledger.items.find(row=>row.id===id)).toMatchObject({payoutTotalBasis:'unknown',note:'Legacy statement',amountMinor:31900});
+    const reversed=await reverseSettlementLine(ctx,id,{shopId:input.shopId,note:'Legacy correction',confirmedCorrection:true});
+    expect((await settlements(ctx,input.shopId)).items.find(row=>row.id===reversed.id)?.payoutTotalBasis).toBe('unknown');
+  });
+
+  it('does not upgrade mixed origins or a replay to reported and enforces reversal provenance',async()=>{
+    const {ctx,orderId}=await sale(),input=line(orderId,`MIXED-${randomUUID()}`,10000,31900);
+    const saved=await recordSettlementLine(ctx,{...input,payoutTotalBasis:'unknown'});
+    await expect(recordSettlementLine(ctx,input)).rejects.toMatchObject({code:'SETTLEMENT_LINE_CONFLICT'});
+    await recordSettlementLine(ctx,line(orderId,input.payoutReference,21900,31900));
+    const payout=(await settlements(ctx,input.shopId)).payouts.find(row=>row.payoutReference===input.payoutReference)!;
+    expect(payout).toMatchObject({payoutTotalBasis:'unknown',arithmeticBalanced:true,reconciliationComplete:false});
+    await expect(withTenant(ctx,tx=>tx.query(`INSERT INTO app.settlement_lines(tenant_id,id,shop_id,source_line_id,payout_reference,order_id,settled_on,payout_total_minor,amount_minor,source_scope,note,actor_id,reverses_line_id,payout_total_basis)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'settlement_reversal','Forged provenance',$10,$11,'reported_total')`,[ctx.tenantId,randomUUID(),input.shopId,`FORGED-BASIS-${randomUUID()}`,input.payoutReference,orderId,today,input.payoutTotalMinor,input.amountMinor,ctx.userId,saved.id]))).rejects.toMatchObject({code:'23514'});
+  });
+
 });

@@ -2,7 +2,7 @@ import { test,expect,type Page } from '@playwright/test';
 import { demo } from '../../packages/domain/src/demo';
 const origin=process.env.APP_ORIGIN||'http://127.0.0.1:3001';
 async function signIn(page:Page){
- await page.goto('/login');await page.getByLabel('อีเมล',{exact:true}).fill('owner@chino.demo');await page.getByLabel('รหัสผ่าน',{exact:true}).fill(demo.password);await page.getByRole('button',{name:'เข้าสู่พื้นที่ทำงาน'}).click();await expect(page.getByRole('heading',{name:'ภาพรวม',exact:true})).toBeVisible();await page.getByLabel('เลือกร้านค้า',{exact:true}).selectOption(demo.shops.tiktok);
+ await page.goto('/login');await page.getByLabel('อีเมล',{exact:true}).fill('owner@chino.demo');await page.getByLabel('รหัสผ่าน',{exact:true}).fill(demo.password);await page.getByRole('button',{name:'เข้าสู่พื้นที่ทำงาน'}).click();await expect(page.getByRole('heading',{name:'ภาพรวม',exact:true})).toBeVisible();await page.getByLabel('เลือกร้านค้า',{exact:true}).selectOption(demo.shops.tiktok);await expect(page).toHaveURL(/\/catalog$/);await expect(page.getByLabel('เลือกร้านค้า',{exact:true})).toHaveValue(demo.shops.tiktok);
 }
 async function create(page:Page){
  const sku='EDIT-BROWSER-'+Date.now(),name='เสื้อทดสอบแก้ไข '+Date.now();
