@@ -1,6 +1,6 @@
 # Verification และ AI evaluation
 
-ผลรอบ v1.11: integration/regression 105/105 ผ่าน; browser E2E ล่าสุด 26/26 ผ่าน ชุด DATA-AG-01 เพิ่มการตรวจ redaction, deterministic pseudonym, adapter detection ทั้งสาม platform, PII-safe report และ checksum-bound finance sign-off รายละเอียดอยู่ใน [ผลส่งมอบ v1.11](36-statement-sample-intake.md) การตรวจ export จริง, live model และ finance UAT ยังรอ input/decision ที่เกี่ยวข้อง
+ผลรอบ v1.29: เพิ่ม [Credential rotation, audience binding และ usage telemetry](55-service-credential-rotation.md); integration รวม 195/195, service principal 11/11 และ Browser Service Access 2/2 ผ่าน ตรวจ dual-key overlap/retirement, environment/audience mismatch, safe telemetry, concurrent rotation, emergency revoke, queue privilege boundary, audit, role/RLS และ responsive UX ทำให้ AG-T01 ผ่านใน machine ingress ระดับ local synthetic; queued worker reauthorization ตาม AG-T02, secret manager และ provider authentication ยัง pending
 
 เอกสารนี้กำหนดเกณฑ์ตรวจต่อเนื่อง ผลที่ผ่านจริงของแต่ละรุ่นอยู่ในเอกสารส่งมอบ เช่น [หลักฐานไฟล์ต้นฉบับ v1.1](24-import-source-evidence.md) ข้อมูลทดสอบยังเป็น synthetic และไม่ใช่ schema ทางการของ marketplace
 
@@ -33,6 +33,11 @@ Other attributable cost 10 บาทใน fixture คือค่าใช้�
 - CAT-T04: internal category ต่างจาก marketplace category ได้; fee facts ไม่ใช้เปอร์เซ็นต์ของเสื้อผ้าเป็น default ทุกหมวด
 - CAT-T05: ชื่อ SKU/attributes ซ้ำระหว่างสอง tenant ไม่ทำให้ mapping หรือ AI context ปะปน
 - CAT-T06: หมวดหรือหน่วยที่ยังไม่รองรับขึ้น needs_review/unsupported ไม่คำนวณด้วยสมมติฐานที่ซ่อนอยู่
+- CAT-T07: หยุดขาย/เปิดขายสินค้าและ SKU ไม่ลบ canonical ID, ต้นทุน, audit หรือการจับคู่ Statement ย้อนหลัง; stale/ข้าม tenant/ไม่มีสิทธิ์ถูกปฏิเสธ
+- CAT-T08: หยุดทั้งสินค้าแล้วเปิดกลับไม่เปิด SKU ที่หยุดเฉพาะรายการโดยอัตโนมัติ; UI แยก effective status และไม่เรียกสถานะนี้ว่า stock ของ marketplace
+- CAT-T09: external product+variant identity หนึ่งชุดในร้านมี active mapping ได้เพียง canonical SKU เดียว; canonical SKU เดียวมีหลาย listing ได้
+- CAT-T10: แก้ mapping ผิดด้วย archive + corrected record โดยไม่เขียนทับ provenance; restore ที่ชน active mapping ถูกปฏิเสธ
+- CAT-T11: manual mapping ต้องมี human confirmation; role/tenant/shop/product boundary และ direct SQL identity mutation ถูกปฏิเสธ
 
 ## Tenant/permission tests — critical
 
@@ -90,6 +95,12 @@ Other attributable cost 10 บาทใน fixture คือค่าใช้�
 
 ก่อนเปิดแต่ละ stage ต้องแปลงกรณีที่เกี่ยวข้องเป็น automated fixtures/E2E และบันทึก provider-specific semantics ไม่ถือว่ามีตารางนี้แล้ว test coverage ครบ
 
+## Co-browsing support boundary tests — synthetic core implemented
+
+SUP-T01–09 มี application control-plane tests แบบ in-memory 11 cases ใน `tests/support-cobrowsing.test.ts` ครอบคลุม consent/code lifecycle, tenant/case/agent scope, masking-policy completeness, stop/revoke, tenant/origin navigation, view-only contract, signed/idempotent webhook และ kill switch ตาม [ผล SUPPORT-01](44-cobrowsing-vendor-discovery-and-synthetic-poc.md) รอบ v1.18 integration รวมผ่าน 136/136
+
+รอบ v1.19 เพิ่ม browser cases 2 กรณีใน `tests/e2e/support-poc.spec.ts` บน [local test surface](45-cobrowsing-local-poc-surface.md) ครอบ consent, code validation, agent preview ที่ไม่พบ canary PII/finance/evidence/secret, Thai text, dynamic modal, stop และ viewport 390×844 ทำให้ Browser E2E รวมผ่าน 28/28 ผลนี้ตรวจ application UX เท่านั้น ยังไม่พิสูจน์ SDK/network/agent view ของ vendor ก่อน SUPPORT-02 ต้องรัน SUP-T01–10 เป็น integration/browser/privacy tests กับ Cobrowse.io และ Unblu sandbox โดยใช้ synthetic data; SUP-T04 ต้องตรวจ canary ใน network/log/export และ SUP-T10 ต้องทดสอบ mobile/Thai IME/reconnect บนอุปกรณ์จริง
+
 ## Release gates
 
 - Financial golden cases และ deterministic calculations ผ่านทั้งหมดตามนิยามที่อนุมัติ
@@ -101,6 +112,7 @@ Other attributable cost 10 บาทใน fixture คือค่าใช้�
 - ผู้ใช้ตรวจรับ workflow จริงก่อนขยาย pilot
 - Stage B: FA-T01–10 และ regression ที่เกี่ยวข้องผ่าน; identity/data/restore readiness ตาม REL-AG-01 ก่อน production pilot; ผล demo ไม่แทนไฟล์จริงหรือ human-graded live-model eval
 - Stage C–E: AG cases ที่เกี่ยวข้อง + connector/payment contract tests + rollout/unknown-outcome recovery ผ่านก่อนเปิด capability นั้น ไม่เลื่อน Stage B รอความสามารถที่ยังไม่ใช้
+- Support track: SUPPORT-01 ใช้ synthetic tenant เท่านั้น; SUPPORT-02 ต้องผ่าน SUP-T01–10, REL-AG-01, vendor/security/privacy review, user/support UAT และมี feature flag/kill switch ก่อนเปิด tenant แรก
 
 ## Evidence report template
 

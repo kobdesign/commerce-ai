@@ -1,6 +1,6 @@
 # Architecture baseline และ decisions
 
-อัปเดต 2026-09-17: ADR-001–006 คงเป็นฐาน; ADR-007–011 เป็น target decisions ตาม [แผน Agentic Commerce](29-agentic-commerce-project-plan.md) ยังไม่ใช่ implementation ที่เปิดใช้ทั้งหมด การออกแบบนี้เพิ่ม modules ใน repo เดิมและไม่เปลี่ยน stack/hosting โดยปริยาย
+อัปเดต 2026-09-24: ADR-001–006 คงเป็นฐาน; ADR-007–012 เป็น target decisions ตาม [แผน Agentic Commerce](29-agentic-commerce-project-plan.md) ยังไม่ใช่ implementation ที่เปิดใช้ทั้งหมด การออกแบบนี้เพิ่ม modules ใน repo เดิมและไม่เปลี่ยน stack/hosting โดยปริยาย
 
 ## ADR-001 — Modular monolith + workers
 
@@ -51,7 +51,7 @@ Catalog กลางไม่ผูกกับเสื้อผ้า ProductV
 
 - การ reconcile statement/payout กับออเดอร์แยกจากการคำนวณกำไร
 - Financial events ใช้บันทึกเพิ่ม/ปรับปรุงที่มีประวัติ ไม่อ้างว่าเป็นบัญชีแยกประเภทตามกฎหมาย
-- Raw source มี lineage, checksum, adapter version และ import time; v1.1 เก็บ CSV ไม่เกิน 1 MB แบบ immutable ใน PostgreSQL และ v1.5 เพิ่ม settlement XLSX ไม่เกิน 5 MB ตาม docs/28 สำหรับ local/staging ก่อนย้าย content ไป private object storage และกำหนด retention ก่อนรับข้อมูลจริง
+- Raw source มี lineage, checksum, adapter version และ import time; v1.13 เพิ่ม `evidence_objects` registry และ `@commerce/storage` adapter สำหรับ CSV ไม่เกิน 1 MB / settlement XLSX ไม่เกิน 5 MB พร้อม backend/object key/retention/lifecycle metadata และตรวจ SHA-256 ตอนอ่าน ช่วง expand ยัง dual-write PostgreSQL legacy bytes เพื่อ rollback ได้ ก่อนย้าย content ไป private object storage และกำหนด retention ก่อนรับข้อมูลจริง
 - มี event/effective date, source update time, currency, timezone และ sign convention
 - เก็บ amount เป็น decimal ที่กำหนด scale หรือ minor units ตามสกุลเงิน ไม่ใช้ floating point
 - แยก actual fees, allocated ads, estimated costs และ missing inputs อย่างชัดเจน
@@ -100,7 +100,7 @@ MVP ผู้ใช้ยืนยัน mapping ผ่าน validated command 
 
 ## ADR-007 — Shared commands, explicit tools และ delegated identity
 
-สถานะ: target ที่เริ่มกับ command ใหม่ใน Stage B; full machine auth ต้องผ่าน AUTH-AG-01 ก่อน external/service access
+สถานะ: AUTH-AG-01a/01b ใช้จริงใน local สำหรับ machine ingress ระดับ tenant/shop/scope/environment/audience พร้อม expiry, dual-key rotation, telemetry และ revocation; outbound tools และ external provider access ยังเป็น target
 
 ```mermaid
 flowchart TD
@@ -115,7 +115,7 @@ flowchart TD
   CHECK --> DOMAIN[Existing and new domain services]
   POLICY -->|Authorized read or allowed action| DOMAIN
   DOMAIN --> DB[(Tenant transaction + audit)]
-  DB --> OUT[Future outbox / workers]
+  DB --> OUT[Transactional outbox / workers]
 ```
 
 - แยก command/query definitions, business executor และ transports; internal agents เรียก registry โดยตรงได้ ไม่บังคับวนผ่าน network MCP
@@ -124,6 +124,8 @@ flowchart TD
 - Effective permissions คือส่วนตัดของ principal grants, delegated scopes, shop grants, policy และสิทธิ์ปัจจุบัน; mapping จาก 5 roles เดิมไม่ยกเลิกข้อจำกัดของ Marketing/Auditor
 - เก็บผู้เสนอ ผู้อนุมัติ ผู้ดำเนินการ และ run/request IDs แยกกัน รักษา FK/attribution ของประวัติเดิมเมื่อขยาย principal model; backfill+tests ก่อนเปลี่ยน RLS ไม่คลายสิทธิ์เดิมเป็น allow-all ชั่วคราว
 - Public buyer tools รับเฉพาะ published catalog projection; merchant tools/financial evidence คนละขอบเขต แม้แชร์ domain functions
+- Local ingress ใช้ Service Principal ที่ secret แสดงครั้งเดียวและเก็บเฉพาะ hash; queue role เรียก scoped wrapper ซึ่งตรวจ tenant, shop, scope, expiry และ revocation ภายใน transaction ทุก Event และไม่มีสิทธิ์เรียก ingest primitive โดยตรง
+- Rotation สร้าง Secret ใหม่และกำหนด `retire_at` ให้ชุดเดิมใน transaction เดียว ใช้ optimistic version กันการหมุนพร้อมกัน; safe telemetry เปิดเฉพาะ prefix/status/last-used/count และ emergency revoke ปิดทุก Secret ของ principal
 
 ## ADR-008 — Durable approvals และผลลัพธ์ที่ตรวจสอบได้
 
@@ -140,7 +142,7 @@ flowchart TD
 
 ## ADR-009 — Inventory, orders และ financial evidence แยกหน้าที่
 
-สถานะ: target Stage C/E; ไม่มีตาราง stock/live orders ที่เปิดใช้ใน baseline นี้
+สถานะ: Stage C local มี stock ledger และ internal human-confirmed reservation แล้ว; live orders, connector automation และ provider-specific policy ยังไม่เปิด
 
 - คง sales_lines, financial_events, settlement และ expenses เดิม เพิ่ม live orders/order lines/events เป็นโมดูลข้างกัน การจ่ายเงินแล้วไม่เท่ากับรับเงินจริงเข้าธนาคาร
 - Canonical variant ID เป็น identity ภายใน; channel listing mapping เก็บ provider/shop/external product/variant IDs และประวัติ ไม่ใช้ชื่อสินค้าเป็นกุญแจ
@@ -155,10 +157,12 @@ flowchart TD
 
 ## ADR-010 — Reliable integration และ protocol boundaries
 
-สถานะ: target C/D/E; ใช้ worker/PostgreSQL เดิมก่อนเพิ่ม infrastructure
+สถานะ: INT-AG-01a transactional outbox, INT-AG-01b synthetic incoming inbox และ INT-AG-01c operational review ใช้จริงใน local; provider connector และ business reconciliation processor ยังเป็น target C/D/E
 
 - Transactional outbox บันทึกพร้อม business change; dispatcher/consumer มี per-consumer delivery state และ idempotency ไม่ใช้ dispatched flag เดียวแทนการส่งหลายปลายทางสำเร็จครบ
-- Incoming webhook/polling events มี inbox identity/dedup, signature verification ตาม provider, ordering/version handling และ reconciliation; cursor อย่างเดียวไม่รับประกันไม่ซ้ำ/ไม่ตกหล่น
+- Incoming contract ตรวจ HMAC ก่อนเรียกฐานข้อมูล เก็บ provider namespace/event ID เป็น dedup identity และเก็บ hash/result/key reference โดยไม่เก็บ secret หรือลายเซ็นดิบ; provider จริงต้องมี adapter ตรวจ canonical bytes/algorithm/key rotation ตามข้อกำหนดของแต่ละช่องทาง
+- Inbox แยก accepted/gap/stale/unordered/invalid signature, ให้ contiguous gap ฟื้นเป็น ready ตาม stream lock และส่งทุกสถานะเข้า outbox; cursor อย่างเดียวไม่รับประกันไม่ซ้ำ/ไม่ตกหล่น และสถานะ ready ยังไม่อนุญาตให้เปลี่ยน order/inventory โดยอัตโนมัติ
+- Operational status แยกจาก reconciliation status: event ปกติเป็น `observed`, exception เป็น `open`, ผู้ใช้ที่ได้รับสิทธิ์จึงขอ replay หรือ acknowledge ได้ด้วย reason + expected version; ทุก action มี append-only history/audit และ replay สร้าง Outbox event โดยไม่เรียก business command
 - Outbox เป็น at-least-once delivery; exactly-once business effect ต้องพิสูจน์ด้วย scoped uniqueness/transaction/idempotent consumers ไม่กล่าวอ้าง transport exactly-once
 - Connector แปลง provider semantics และตรวจ schema; core ตัดสิน business policy มี capability matrix แทนการสมมติทุก provider รองรับ OAuth/push/version CAS เหมือนกัน
 - `expected_version` ภายในไม่ทำให้ marketplace รองรับ compare-and-swap; ถ้า provider ไม่มี ใช้ serialize/coalesce/read-back ตามข้อจำกัดและแสดงความเสี่ยงที่เหลือ
@@ -175,6 +179,33 @@ flowchart TD
 - เปลี่ยน schema แบบ expand → backfill/verify → contract ภายหลัง; rehearsal กับข้อมูลเดิมและ app rollback ก่อน release ไม่สร้าง principal/inventory/order ทั้งชุดใน migration เดียว
 - เพิ่ม package เมื่อมี workflow ใช้จริง: tools/policy เริ่ม B, inventory/orders/connectors เริ่ม C, feed/API/MCP เริ่ม D; ไม่สร้าง skeleton ทั้งหมดเป็น prerequisite
 - การแยก tenant ครอบ DB, files, jobs, caches, conversation, retrieval, logs และ output ของโมเดล; cache key รวม tenant+effective authorization+data version และรองรับ revocation
+
+## ADR-012 — Co-browsing ใช้ vendor adapter และ consent-bound session
+
+สถานะ: target ตาม SUPPORT-01–03; ยังไม่มี SDK/vendor ใน runtime และยังไม่อนุมัติซื้อบริการ
+
+- เลือก DOM-based Co-browsing แบบ view-only เป็นค่าเริ่มต้นสำหรับหน้า own-origin ของแพลตฟอร์ม ไม่พัฒนา streaming/mirroring engine เองใน pilot แรก
+- Frontend โหลด vendor SDK เมื่อผู้ใช้เปิด flow ช่วยเหลือและ policy ของ tenant อนุญาตเท่านั้น ไม่โหลดเงียบเป็นส่วนหนึ่งของ analytics
+- `SupportSession` ผูก `tenant_id`, customer user, support case, agent identity, origin/page scope, mode, consent/expiry/end timestamps และ vendor session reference; เก็บ short code เป็น hash และใช้ครั้งเดียว
+- Agent Portal แยก authorization plane ใช้ SSO/MFA และ role จำกัด การจับคู่ด้วยรหัสไม่ให้สิทธิ์ agent เพิ่มเหนือ policy ของ server
+- Masking ใช้ deny-by-default หรือ allowlist ที่ browser ก่อนส่งข้อมูล ห้ามส่ง password, OTP, tokens, cookies/local storage, payment/bank details, raw statement content, hidden DOM/application state และข้อมูล tenant อื่น
+- Vendor integration อยู่หลัง adapter (`create`, `end`, signed/idempotent audit webhook) เพื่อเปลี่ยน provider และปิด feature ราย tenant ได้ ไม่มี vendor callback ใดข้าม server authorization
+- หน้าเปลี่ยน origin, สลับ tenant หรือเข้าขอบเขตการเงินที่ไม่ได้อนุญาตต้องหยุดหรือขอ consent ใหม่ มีแถบสถานะและปุ่มหยุดที่คงอยู่ตลอด session
+- Recording, remote control, full-device sharing และ AI transcript/summarization ปิดใน pilot แรก การเปิดแต่ละอย่างต้องมี decision, consent, retention, access และ regression tests แยก
+- Vendor ไม่ได้รับ cookie/session token และ agent ไม่ login แทนลูกค้า เหตุการณ์เริ่ม/ยินยอม/ดูหน้า/เปลี่ยนขอบเขต/จบ/timeout บันทึก audit โดยไม่เก็บค่าที่ปกปิด
+
+รายละเอียด PoC, threat boundaries และ acceptance อยู่ใน [แผน Co-browsing](37-cobrowsing-support-plan.md)
+
+## ADR-013 — Production providers ผ่าน adapters และ approval manifest
+
+สถานะ: proposed ใน [production dependency decision pack](43-production-dependency-decision-pack.md); ยังไม่อนุมัติซื้อบริการหรือเปิด production
+
+- Production identity ใช้ provider adapter แต่ memberships/shop grants/RLS ใน application ยังคงเป็น authorization source
+- Evidence storage ใช้ backend adapter + registry/checksum เดิม ย้ายแบบ dual-write/backfill/verify/contract
+- Backup, monitoring และ AI provider มี environment แยก, least-privilege credentials, cost owner และ tested exit/recovery path
+- Provider recommendation และ owner approval อยู่ใน machine-readable manifest; approved status ต้องมีผู้อนุมัติและ evidence
+- Approval ของ provider ไม่ข้าม implementation, migration, security, UAT หรือ production preflight gates
+- ค่า retention/RPO/RTO/budget เป็น policy version ที่ audit ได้ ไม่ฝังเป็นความจริงถาวรใน prompt หรือ provider dashboard เพียงแห่งเดียว
 
 ## Sources ที่ใช้ประกอบ baseline
 

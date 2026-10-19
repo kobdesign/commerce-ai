@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { AppError,uuid,type Context } from '@commerce/contracts';
 import { withTenant,type Tx } from '@commerce/db';
 import { assertShop,audit } from '@commerce/domain';
+import { readEvidenceObject,storeEvidenceObject,verifyLegacyEvidence } from '@commerce/storage';
 
 export const fields=['orderId','sku','quantity','date','netSales'] as const;
 export type Field=typeof fields[number];
@@ -17,7 +18,7 @@ export type PreviewRow={record:number;sourceLineId:string|null;orderId:string;sk
 export type Preview={rows:PreviewRow[];total:number;valid:number;invalid:number;warnings:number;sourceHash:string;mapping:Mapping;filename:string};
 export type ImportEvidence={filename:string;contentType:string;byteSize:number;sourceHash:string;adapterKey:string;schemaVersion:string;storageVersion:string;createdAt:string};
 type StoredEvidence=Omit<ImportEvidence,'createdAt'>&{createdAt:Date};
-const sourceAdapter='generic-order-lines',sourceSchemaVersion='generic-order-lines-v1',sourceStorageVersion='postgres-bytea-v1';
+const sourceAdapter='generic-order-lines',sourceSchemaVersion='generic-order-lines-v1';
 function evidenceDto(source:StoredEvidence):ImportEvidence{return {...source,createdAt:source.createdAt.toISOString()};}
 function reject(message:string):never{throw new AppError(400,'INVALID_CSV',message);}
 function readCsv(d:SourceFile){
@@ -91,16 +92,18 @@ export async function saveDraft(ctx:Context,input:unknown){
     const parserVersion='orders-preview-v3';
     const fingerprint=createHash('sha256').update(JSON.stringify([preview.sourceHash,d.delimiter,[...fields.map(f=>d.mapping[f]),d.mapping.sourceLineId,d.mapping.platformFee],parserVersion])).digest('hex');
     const bytes=Buffer.from(d.csv,'utf8'),newSourceId=randomUUID();
-    const insertedSources=await tx.query<{id:string}>(`INSERT INTO app.import_sources(tenant_id,id,shop_id,actor_id,filename,content_type,byte_size,source_hash,delimiter,adapter_key,schema_version,storage_version,content)
-      VALUES($1,$2,$3,$4,$5,'text/csv',$6,$7,$8,$9,$10,$11,$12)
-      ON CONFLICT(tenant_id,shop_id,source_hash) DO NOTHING RETURNING id`,[ctx.tenantId,newSourceId,d.shopId,ctx.userId,d.filename,bytes.byteLength,preview.sourceHash,d.delimiter,sourceAdapter,sourceSchemaVersion,sourceStorageVersion,bytes]);
+    const evidence=await storeEvidenceObject(tx,ctx,{shopId:d.shopId,contentType:'text/csv',content:bytes,sourceHash:preview.sourceHash});
+    const insertedSources=await tx.query<{id:string}>(`INSERT INTO app.import_sources(tenant_id,id,shop_id,actor_id,filename,content_type,byte_size,source_hash,delimiter,adapter_key,schema_version,storage_version,content,evidence_object_id)
+      VALUES($1,$2,$3,$4,$5,'text/csv',$6,$7,$8,$9,$10,'postgres-bytea-v1',$11,$12)
+      ON CONFLICT(tenant_id,shop_id,source_hash) DO NOTHING RETURNING id`,[ctx.tenantId,newSourceId,d.shopId,ctx.userId,d.filename,bytes.byteLength,preview.sourceHash,d.delimiter,sourceAdapter,sourceSchemaVersion,bytes,evidence.id]);
     const sourceId=insertedSources[0]?.id??(await tx.query<{id:string}>('SELECT id FROM app.import_sources WHERE shop_id=$1 AND source_hash=$2',[d.shopId,preview.sourceHash]))[0]?.id;
     if(!sourceId)throw new AppError(500,'SOURCE_STORE_FAILED','ไม่สามารถเก็บหลักฐานไฟล์ต้นฉบับได้');
     const rows=await tx.query<{id:string}>(`INSERT INTO app.import_drafts(tenant_id,id,shop_id,actor_id,filename,source_hash,fingerprint,mapping,preview,parser_version,source_id)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(tenant_id,shop_id,fingerprint) DO NOTHING RETURNING id`,[ctx.tenantId,randomUUID(),d.shopId,ctx.userId,d.filename,preview.sourceHash,fingerprint,JSON.stringify(d.mapping),JSON.stringify(preview),parserVersion,sourceId]);
     const id=rows[0]?.id??(await tx.query<{id:string}>('SELECT id FROM app.import_drafts WHERE shop_id=$1 AND fingerprint=$2',[d.shopId,fingerprint]))[0]?.id;
     if(!id)throw new AppError(500,'DRAFT_STORE_FAILED','ไม่สามารถบันทึกร่างนำเข้าได้');
-    const [source]=await tx.query<StoredEvidence>(`SELECT $2::text AS filename,content_type AS "contentType",byte_size AS "byteSize",source_hash AS "sourceHash",adapter_key AS "adapterKey",schema_version AS "schemaVersion",storage_version AS "storageVersion",created_at AS "createdAt" FROM app.import_sources WHERE id=$1`,[sourceId,d.filename]);
+    const [source]=await tx.query<StoredEvidence>(`SELECT $2::text AS filename,s.content_type AS "contentType",s.byte_size AS "byteSize",s.source_hash AS "sourceHash",s.adapter_key AS "adapterKey",s.schema_version AS "schemaVersion",coalesce(e.storage_backend,s.storage_version) AS "storageVersion",s.created_at AS "createdAt"
+      FROM app.import_sources s LEFT JOIN app.evidence_objects e ON e.tenant_id=s.tenant_id AND e.id=s.evidence_object_id WHERE s.id=$1`,[sourceId,d.filename]);
     if(!source)throw new AppError(500,'SOURCE_STORE_FAILED','ไม่สามารถอ่านหลักฐานไฟล์ต้นฉบับที่บันทึกแล้วได้');
     if(!rows.length)return {id,duplicate:true,source:evidenceDto(source)};
     await audit(tx,ctx,'import.draft.created',id,{shopId:d.shopId,total:preview.total,invalid:preview.invalid,sourceId,sourceHash:preview.sourceHash,byteSize:bytes.byteLength,schemaVersion:sourceSchemaVersion});
@@ -125,10 +128,11 @@ export async function getDraft(ctx:Context,shopId:string,id:string){uuid.parse(i
   access(role,false);await assertShop(tx,ctx,shopId);
   type StoredDraft=Omit<Draft,'source'|'job'>&{sourceId:string|null;contentType:string|null;byteSize:number|null;sourceHash:string|null;adapterKey:string|null;schemaVersion:string|null;storageVersion:string|null;sourceCreatedAt:Date|null}&Partial<StoredImportCommitJob>;
   const [draft]=await tx.query<StoredDraft>(`SELECT d.id,d.filename,d.created_at,d.preview,b.id AS batch_id,b.committed_at,
-    s.id AS "sourceId",s.content_type AS "contentType",s.byte_size AS "byteSize",s.source_hash AS "sourceHash",s.adapter_key AS "adapterKey",s.schema_version AS "schemaVersion",s.storage_version AS "storageVersion",s.created_at AS "sourceCreatedAt",
+    s.id AS "sourceId",s.content_type AS "contentType",s.byte_size AS "byteSize",s.source_hash AS "sourceHash",s.adapter_key AS "adapterKey",s.schema_version AS "schemaVersion",coalesce(e.storage_backend,s.storage_version) AS "storageVersion",s.created_at AS "sourceCreatedAt",
     j.id AS "jobId",j.status AS "jobStatus",j.attempt_count AS "attemptCount",j.result AS "jobResult",j.error_code AS "errorCode",j.error_message AS "errorMessage",j.requested_at AS "requestedAt",j.started_at AS "startedAt",j.completed_at AS "completedAt"
     FROM app.import_drafts d LEFT JOIN app.import_batches b ON b.tenant_id=d.tenant_id AND b.draft_id=d.id
     LEFT JOIN app.import_sources s ON s.tenant_id=d.tenant_id AND s.id=d.source_id
+    LEFT JOIN app.evidence_objects e ON e.tenant_id=s.tenant_id AND e.id=s.evidence_object_id
     LEFT JOIN app.import_commit_jobs j ON j.tenant_id=d.tenant_id AND j.draft_id=d.id
     WHERE d.id=$1 AND d.shop_id=$2`,[id,shopId]);
   if(!draft)throw new AppError(404,'NOT_FOUND','ไม่พบร่างในร้านนี้');
@@ -143,11 +147,13 @@ export async function getDraft(ctx:Context,shopId:string,id:string){uuid.parse(i
 export type ImportSourceDownload={filename:string;contentType:string;byteSize:number;sourceHash:string;content:Buffer};
 export async function getImportSource(ctx:Context,draftId:string):Promise<ImportSourceDownload>{uuid.parse(draftId);return withTenant(ctx,async(tx,role)=>{
   access(role,false);
-  const [source]=await tx.query<ImportSourceDownload&{sourceId:string;shopId:string}>(`SELECT s.id AS "sourceId",d.shop_id AS "shopId",d.filename,s.content_type AS "contentType",s.byte_size AS "byteSize",s.source_hash AS "sourceHash",s.content
+  const [source]=await tx.query<ImportSourceDownload&{sourceId:string;shopId:string;evidenceObjectId:string|null}>(`SELECT s.id AS "sourceId",d.shop_id AS "shopId",d.filename,s.content_type AS "contentType",s.byte_size AS "byteSize",s.source_hash AS "sourceHash",s.content,s.evidence_object_id AS "evidenceObjectId"
     FROM app.import_drafts d JOIN app.import_sources s ON s.tenant_id=d.tenant_id AND s.id=d.source_id WHERE d.id=$1`,[draftId]);
   if(!source)throw new AppError(404,'SOURCE_NOT_STORED','ร่างนี้ไม่มีไฟล์ต้นฉบับที่เก็บไว้');
+  const content=source.evidenceObjectId?(await readEvidenceObject(tx,source.evidenceObjectId)).content:source.content;
+  if(!source.evidenceObjectId)verifyLegacyEvidence(content,source.byteSize,source.sourceHash);
   await audit(tx,ctx,'import.source.downloaded',source.sourceId,{draftId,shopId:source.shopId,sourceHash:source.sourceHash,byteSize:source.byteSize});
-  return {filename:source.filename,contentType:source.contentType,byteSize:source.byteSize,sourceHash:source.sourceHash,content:source.content};
+  return {filename:source.filename,contentType:source.contentType,byteSize:source.byteSize,sourceHash:source.sourceHash,content};
 });}
 
 const storedRowSchema=z.object({

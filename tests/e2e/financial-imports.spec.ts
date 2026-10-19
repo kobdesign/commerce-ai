@@ -1,11 +1,14 @@
+import { openShopPage } from './helpers/navigation';
 import { test,expect,type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { demo } from '../../packages/domain/src/demo';
-import { closePools,resolveContext } from '../../packages/db/src/index';
+import { closePools,resolveContext,withTenant } from '../../packages/db/src/index';
+import { createShop } from '../../packages/domain/src/index';
 import { recordSettlementLine } from '../../packages/finance/src/index';
 import { commitDraft,saveDraft } from '../../packages/imports/src/index';
 import { confirmFinancialReviewTask,draftFinancialReviewTask,executeSettlementReview,financialReviewTask } from '../../packages/ai/src/index';
-const soldOn=new Date().toISOString().slice(0,10);
+import { bangkokBusinessDate } from '../support/time';
+const soldOn=bangkokBusinessDate();
 test.afterAll(closePools);
 
 async function signIn(page:Page,email='owner@chino.demo'){
@@ -13,15 +16,15 @@ async function signIn(page:Page,email='owner@chino.demo'){
   const tenant=page.getByLabel('เลือกบริษัท',{exact:true});if(await tenant.count()&&await tenant.inputValue()!==demo.tenants.chino){await tenant.selectOption(demo.tenants.chino);await expect(page.getByRole('heading',{name:'ภาพรวม',exact:true})).toBeVisible();}
   await page.getByLabel('เลือกร้านค้า',{exact:true}).selectOption(demo.shops.tiktok);await expect(page).toHaveURL(/\/catalog$/);await expect(page.getByLabel('เลือกร้านค้า',{exact:true})).toHaveValue(demo.shops.tiktok);
 }
-async function importedOrder(stamp:number,suffix:string){
+async function importedOrder(stamp:number,suffix:string,shopId=demo.shops.tiktok){
   const ctx=await resolveContext(demo.users.owner,demo.tenants.chino),order=`ZZZ-${stamp}-${suffix}`;
   const csv=`order_id,source_line_id,sku,quantity,date,net_receipt,platform_fee\n${order},SALE-${suffix}-${stamp},CH-L-BK-32,1,${soldOn},319.00,80.00\n`;
-  const input={shopId:demo.shops.tiktok,filename:`sale-${suffix.toLowerCase()}-${stamp}.csv`,delimiter:',' as const,csv,mapping:{orderId:'order_id',sourceLineId:'source_line_id',sku:'sku',quantity:'quantity',date:'date',netSales:'net_receipt',platformFee:'platform_fee'}};
+  const input={shopId,filename:`sale-${suffix.toLowerCase()}-${stamp}.csv`,delimiter:',' as const,csv,mapping:{orderId:'order_id',sourceLineId:'source_line_id',sku:'sku',quantity:'quantity',date:'date',netSales:'net_receipt',platformFee:'platform_fee'}};
   const draft=await saveDraft(ctx,input);await commitDraft(ctx,{shopId:input.shopId,draftId:draft.id});return order;
 }
 
 test('confirms a reviewed CSV once and traces contribution back to its source draft',async({page})=>{
-  await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
+  await page.setViewportSize({width:390,height:900});await signIn(page);await openShopPage(page,'นำเข้ารายงาน');
   const stamp=Date.now(),order=`ZZZ-${stamp}-FIN`,filename=`financial-${stamp}.csv`;
   const csv=`order_id,sku,quantity,date,net_receipt,platform_fee\n${order},CH-L-BK-32,1,${soldOn},319.00,80.00\n`;
   await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:filename,mimeType:'text/csv',buffer:Buffer.from(csv)});
@@ -43,7 +46,7 @@ test('confirms a reviewed CSV once and traces contribution back to its source dr
 });
 
 test('maps a source line ID and blocks the same marketplace line in a later file',async({page})=>{
-  await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
+  await page.setViewportSize({width:390,height:900});await signIn(page);await openShopPage(page,'นำเข้ารายงาน');
   const stamp=Date.now(),sourceLineId=`SOURCE-E2E-${stamp}`;
   const csv=(order:string)=>`order_id,source_line_id,sku,quantity,date,net_receipt,platform_fee\n${order},${sourceLineId},CH-L-BK-32,1,${soldOn},319.00,80.00\n`;
   await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:`source-first-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(csv(`SOURCE-ORDER-A-${stamp}`))});
@@ -61,20 +64,20 @@ test('maps a source line ID and blocks the same marketplace line in a later file
 });
 
 test('records and reverses a partial refund without rewriting the sale',async({page})=>{
-  await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
+  await page.setViewportSize({width:390,height:900});await signIn(page);await openShopPage(page,'นำเข้ารายงาน');
   const stamp=Date.now(),order=`ZZZ-${stamp}-REFUND`,sourceEventId=`REFUND-EVENT-${stamp}`;
   const csv=`order_id,source_line_id,sku,quantity,date,net_receipt,platform_fee\n${order},REFUND-LINE-${stamp},CH-L-BK-32,1,${soldOn},319.00,80.00\n`;
   await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:`refund-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(csv)});
   await page.getByRole('button',{name:'ตรวจรายการ',exact:true}).click();await page.getByRole('button',{name:'บันทึกร่างเพื่อตรวจ',exact:true}).click();
   await page.getByRole('checkbox',{name:/ฉันตรวจแล้ว/}).check();await page.getByRole('button',{name:'ยืนยันนำเข้าข้อมูล',exact:true}).click();await expect(page.getByRole('status')).toContainText('นำเข้า 1 รายการแล้ว');
-  await page.getByRole('link',{name:'คืนเงินและปรับยอด',exact:true}).click();await expect(page.getByRole('heading',{name:'คืนเงินและปรับยอด',exact:true})).toBeVisible();
+  await openShopPage(page,'คืนเงินและปรับยอด');await expect(page.getByRole('heading',{name:'คืนเงินและปรับยอด',exact:true})).toBeVisible();
   await page.getByLabel('รหัสรายการต้นทาง',{exact:true}).fill(sourceEventId);await page.getByLabel('เลขคำสั่งซื้อ',{exact:true}).fill(order);await page.getByLabel('จำนวนเงิน (บาท)',{exact:true}).fill('100.00');
   await page.getByLabel('เหตุผลหรือหลักฐาน',{exact:true}).fill('คืนเงินบางส่วน ลูกค้ายังเก็บสินค้า');await page.getByRole('checkbox',{name:/ยอดนี้ยังไม่รวมอยู่ในเงินรับสุทธิ/}).check();
   await page.getByRole('button',{name:'บันทึกรายการปรับยอด',exact:true}).click();await expect(page.getByRole('status')).toContainText(`จับคู่กับคำสั่งซื้อ ${order} จำนวน 1 รายการ`);
   const eventCard=page.locator('.adjustment-card').filter({hasText:sourceEventId});await expect(eventCard).toBeVisible();await expect(eventCard).toContainText('-฿100.00');await expect(eventCard).toContainText('จับคู่ 1 รายการ');
   await page.getByRole('link',{name:/ดูผลต่อเงินรับ/}).click();const orderRow=page.getByRole('row').filter({hasText:order});
   await expect(orderRow).toContainText('฿319.00');await expect(orderRow).toContainText('-฿100.00');await expect(orderRow).toContainText('฿219.00');await expect(orderRow).toContainText('-฿31.00');
-  await page.getByRole('navigation').getByRole('link',{name:'คืนเงินและปรับยอด',exact:true}).click();const originalCard=page.locator('.adjustment-card').filter({hasText:sourceEventId}),reversalButton=originalCard.getByRole('button',{name:'แก้กลับรายการ',exact:true});
+  await openShopPage(page,'คืนเงินและปรับยอด');const originalCard=page.locator('.adjustment-card').filter({hasText:sourceEventId}),reversalButton=originalCard.getByRole('button',{name:'แก้กลับรายการ',exact:true});
   await expect(reversalButton).toBeVisible();expect(await reversalButton.evaluate(element=>element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);await reversalButton.click();
   await expect(page.getByText('ระบบจะสร้างรหัสรายการแก้กลับให้อัตโนมัติและผูกกับรายการเดิม',{exact:true})).toBeVisible();await expect(page.getByLabel('รหัสรายการแก้กลับ',{exact:true})).toHaveCount(0);
   await page.getByLabel('เหตุผลที่แก้กลับ',{exact:true}).fill('ทดสอบแก้กลับรายการที่บันทึกซ้ำ');await page.getByRole('checkbox',{name:/ยกเลิกผลของรายการนี้/}).check();
@@ -88,14 +91,14 @@ test('records and reverses a partial refund without rewriting the sale',async({p
 test('records and reverses an allocated shop expense and shows its effect separately from contribution',async({page})=>{
   await page.setViewportSize({width:390,height:900});await signIn(page);
   const stamp=Date.now(),reference=`AD-STATEMENT-${stamp}`;
-  await page.getByRole('link',{name:'ค่าใช้จ่ายร้าน',exact:true}).click();await expect(page.getByRole('heading',{name:'ค่าใช้จ่ายร้าน',exact:true})).toBeVisible();
+  await openShopPage(page,'ค่าใช้จ่ายร้าน');await expect(page.getByRole('heading',{name:'ค่าใช้จ่ายร้าน',exact:true})).toBeVisible();
   await expect(page.locator('.financial-event-entry select').first()).toHaveValue('advertising');await page.getByLabel('จำนวนเงินค่าใช้จ่าย (บาท)',{exact:true}).fill('250.00');await page.getByLabel('เอกสารอ้างอิงค่าใช้จ่าย',{exact:true}).fill(reference);
   await page.getByLabel('ขอบเขตค่าใช้จ่าย',{exact:true}).selectOption('shared_allocated');await page.getByLabel('วิธีแบ่งค่าใช้จ่ายส่วนกลาง',{exact:true}).fill('แบ่ง 40% ตามสัดส่วนยอดขายของร้าน');
   await page.getByLabel('รายละเอียดค่าใช้จ่าย',{exact:true}).fill('ค่าโฆษณา TikTok รอบวันที่ 1–15 ก.ย.');await page.getByRole('checkbox',{name:/ยอดนี้จ่ายแยกและยังไม่รวมอยู่ในเงินรับสุทธิ/}).check();
   await page.getByRole('button',{name:'บันทึกค่าใช้จ่าย',exact:true}).click();await expect(page.getByRole('status')).toContainText('บันทึกค่าใช้จ่ายแล้ว');
   const expenseCard=page.locator('.adjustment-card').filter({hasText:reference});await expect(expenseCard).toBeVisible();await expect(expenseCard).toContainText('-฿250.00');await expect(expenseCard).toContainText('แบ่งจากส่วนกลาง');await expect(expenseCard).toContainText('แบ่ง 40% ตามสัดส่วนยอดขายของร้าน');
   await page.getByRole('link',{name:'ดูเงินรับและต้นทุน',exact:true}).click();const impact=page.locator('.expense-impact-summary');await expect(impact).toContainText('ค่าโฆษณา');await expect(impact).toContainText('฿250.00');await expect(impact).toContainText('เงินเหลือหลังค่าใช้จ่ายที่บันทึก');
-  await page.getByRole('navigation').getByRole('link',{name:'ค่าใช้จ่ายร้าน',exact:true}).click();await expenseCard.getByRole('button',{name:'แก้กลับรายการ',exact:true}).click();
+  await openShopPage(page,'ค่าใช้จ่ายร้าน');await expenseCard.getByRole('button',{name:'แก้กลับรายการ',exact:true}).click();
   const reversalReason=`แก้กลับเอกสาร ${reference} ที่บันทึกซ้ำ`;await expect(page.getByText('ระบบจะสร้างรหัสรายการแก้กลับและผูกกับรายการเดิมให้อัตโนมัติ',{exact:true})).toBeVisible();await page.getByLabel('เหตุผลที่แก้กลับ',{exact:true}).fill(reversalReason);await page.getByRole('checkbox',{name:/ยกเลิกผลของรายการนี้/}).check();
   await page.getByRole('button',{name:'ยืนยันการแก้กลับ',exact:true}).click();await expect(page.getByRole('status')).toContainText('แก้กลับ ค่าโฆษณา แล้ว');
   await expect(page.locator('.adjustment-card').filter({hasText:reference}).filter({hasText:'ถูกแก้กลับแล้ว'}).first()).toBeVisible();await expect(page.locator('.adjustment-card').filter({hasText:'รายการแก้กลับ'}).filter({hasText:reversalReason}).first()).toContainText('+฿250.00');
@@ -104,8 +107,16 @@ test('records and reverses an allocated shop expense and shows its effect separa
 });
 
 test('reconciles a marketplace payout with an imported order on mobile',async({page})=>{
-  await page.setViewportSize({width:390,height:900});const stamp=Date.now(),order=await importedOrder(stamp,'SETTLEMENT'),payout=`PAYOUT-${stamp}`,payoutLine=`PAYOUT-LINE-${stamp}`;
-  await signIn(page);await page.getByRole('link',{name:'กระทบยอดเงินโอน',exact:true}).click();await expect(page.getByRole('heading',{name:'กระทบยอดเงินโอน',exact:true})).toBeVisible();
+  await page.setViewportSize({width:390,height:900});
+  const stamp=Date.now(),ctx=await resolveContext(demo.users.owner,demo.tenants.chino);
+  // Isolate the ledger so old demo mismatches cannot push this balanced order past its 100-row window.
+  const shopId=await createShop(ctx,{name:`ZZ reconciliation test ${stamp}`,channel:'tiktok'});
+  await withTenant(ctx,tx=>tx.query('INSERT INTO app.shop_products(tenant_id,shop_id,product_id) VALUES($1,$2,$3)',[ctx.tenantId,shopId,demo.products.pants]));
+  const order=await importedOrder(stamp,'SETTLEMENT',shopId),payout=`PAYOUT-${stamp}`,payoutLine=`PAYOUT-LINE-${stamp}`;
+  await signIn(page);await page.getByLabel('เลือกร้านค้า',{exact:true}).selectOption(shopId);await expect(page).toHaveURL(/\/catalog$/);
+  // The URL is already /catalog: wait for the isolated shop's rendered data before opening its menu.
+  await expect(page.locator('.page-heading p')).toHaveText(/^1 สินค้า ·/);
+  await openShopPage(page,'กระทบยอดเงินโอน');await expect(page.getByRole('heading',{name:'กระทบยอดเงินโอน',exact:true})).toBeVisible();
   await page.getByLabel('รหัสรอบโอน',{exact:true}).fill(payout);await page.getByLabel('ยอดรวมอ้างอิงของรอบ (บาท)',{exact:true}).fill('319.00');
   await page.getByLabel('รหัสบรรทัดต้นทาง',{exact:true}).fill(payoutLine);await page.getByLabel('เลขคำสั่งซื้อสำหรับกระทบยอด',{exact:true}).fill(order);
   await page.getByLabel('ยอดที่จัดสรรให้คำสั่งซื้อนี้ (บาท)',{exact:true}).fill('319.00');await page.getByLabel('หลักฐานหรือหมายเหตุการโอน',{exact:true}).fill('Statement TikTok รอบทดสอบ');
@@ -122,7 +133,7 @@ test('reconciles a marketplace payout with an imported order on mobile',async({p
 
 test('imports a settlement CSV with mapping, preview and immutable source evidence',async({page})=>{
   await page.setViewportSize({width:390,height:900});const stamp=Date.now(),order=await importedOrder(stamp,'SETTLEMENT-CSV'),payout=`PAYOUT-CSV-${stamp}`,payoutLine=`PAYOUT-CSV-LINE-${stamp}`;
-  await signIn(page);await page.getByRole('link',{name:'กระทบยอดเงินโอน',exact:true}).click();await page.getByText('นำเข้า statement จากไฟล์',{exact:true}).click();
+  await signIn(page);await openShopPage(page,'กระทบยอดเงินโอน');await page.getByText('นำเข้า statement จากไฟล์',{exact:true}).click();
   const statementCsv=`payout_reference,settled_on,payout_total,source_line_id,order_id,allocation_amount,note\n${payout},${soldOn},319.00,${payoutLine},${order},319.00,Statement CSV ทดสอบ\n`;
   await page.getByLabel('เลือกไฟล์ statement CSV หรือ XLSX',{exact:true}).setInputFiles({name:`statement-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(statementCsv)});
   await expect(page.getByRole('heading',{name:'จับคู่คอลัมน์',exact:true})).toBeVisible();await expect(page.getByLabel('คอลัมน์ รหัสรอบโอน',{exact:true})).toHaveValue('payout_reference');
@@ -136,7 +147,7 @@ test('imports a settlement CSV with mapping, preview and immutable source eviden
 
 test('detects a Shopee statement and skips manual column mapping',async({page})=>{
   await page.setViewportSize({width:390,height:900});const stamp=Date.now(),order=await importedOrder(stamp,'SHOPEE-ADAPTER');
-  await signIn(page);await page.getByRole('link',{name:'กระทบยอดเงินโอน',exact:true}).click();await page.getByText('นำเข้า statement จากไฟล์',{exact:true}).click();
+  await signIn(page);await openShopPage(page,'กระทบยอดเงินโอน');await page.getByText('นำเข้า statement จากไฟล์',{exact:true}).click();
   const template=await readFile('apps/web/public/examples/shopee-income-synthetic.csv','utf8'),csv=template.replace('SP-ORDER-10001',order).replaceAll('SP-PAYOUT-20260917-01',`SP-PAYOUT-${stamp}`).replace('SP-TXN-10001',`SP-TXN-${stamp}-1`).replace('SP-TXN-10002',`SP-TXN-${stamp}-2`);
   const filename=`Income.paid.${stamp}.csv`;await page.getByLabel('เลือกไฟล์ statement CSV หรือ XLSX',{exact:true}).setInputFiles({name:filename,mimeType:'text/csv',buffer:Buffer.from(csv)});
   await expect(page.getByText(/ตรวจจับ: Shopee/)).toBeVisible();await expect(page.getByRole('heading',{name:'จับคู่คอลัมน์',exact:true})).toHaveCount(0);await expect(page.getByText(order,{exact:true})).toBeVisible();
@@ -147,7 +158,7 @@ test('detects a Shopee statement and skips manual column mapping',async({page})=
 });
 
 test('confirms a missing cost from the review inbox without changing the imported line',async({page})=>{
-  await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'นำเข้ารายงาน',exact:true}).click();
+  await page.setViewportSize({width:390,height:900});await signIn(page);await openShopPage(page,'นำเข้ารายงาน');
   const stamp=Date.now(),order=`ZZZ-${stamp}-REVIEW`,filename=`review-${stamp}.csv`;
   const csv=`order_id,sku,quantity,date,net_receipt\n${order},CH-L-NV-34,1,${soldOn},500.00\n`;
   await page.getByLabel('เลือกไฟล์ CSV',{exact:true}).setInputFiles({name:filename,mimeType:'text/csv',buffer:Buffer.from(csv)});
@@ -159,7 +170,7 @@ test('confirms a missing cost from the review inbox without changing the importe
   const reviewCard=page.locator('.review-card').filter({hasText:order});await expect(reviewCard).toBeVisible();
   await reviewCard.getByLabel(`ต้นทุนต่อหน่วยของ ${order}`,{exact:true}).fill('200.00');await reviewCard.getByLabel(`เหตุผลของ ${order}`,{exact:true}).fill('ใบแจ้งต้นทุนเดือนกันยายน');
   await reviewCard.getByRole('button',{name:'ยืนยันต้นทุนรายการนี้',exact:true}).click();await expect(page.getByRole('status')).toContainText(`ยืนยันต้นทุนของคำสั่งซื้อ ${order} แล้ว`);await expect(page.locator('.review-card').filter({hasText:order})).toHaveCount(0);
-  await page.getByRole('link',{name:'เงินรับและต้นทุน',exact:true}).click();const resolved=page.getByRole('row').filter({hasText:order});
+  await openShopPage(page,'เงินรับและต้นทุน');const resolved=page.getByRole('row').filter({hasText:order});
   await expect(resolved).toContainText('฿200.00');await expect(resolved).toContainText('฿300.00');await expect(page.getByText(/ใช้ต้นทุนที่ผู้ใช้ยืนยันย้อนหลัง/)).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.screenshot({path:'artifacts/cost-review-390.png',fullPage:true});
@@ -167,7 +178,7 @@ test('confirms a missing cost from the review inbox without changing the importe
 
 test('shows derived payout totals as unconfirmed before and after import on mobile',async({page})=>{
   await page.setViewportSize({width:390,height:900});const stamp=Date.now(),order=await importedOrder(stamp,'DERIVED-TOTAL'),payout=`SP-DERIVED-${stamp}`;
-  await signIn(page);await page.getByRole('link',{name:'กระทบยอดเงินโอน',exact:true}).click();await page.getByText('นำเข้า statement จากไฟล์',{exact:true}).click();
+  await signIn(page);await openShopPage(page,'กระทบยอดเงินโอน');await page.getByText('นำเข้า statement จากไฟล์',{exact:true}).click();
   const csv=`Payout ID,Order ID,Release Date,Transaction ID,Released Amount\n${payout},${order},${soldOn},DERIVED-${stamp},319.00\n`;
   await page.getByLabel('เลือกไฟล์ statement CSV หรือ XLSX',{exact:true}).setInputFiles({name:`shopee-derived-${stamp}.csv`,mimeType:'text/csv',buffer:Buffer.from(csv)});
   const preview=page.getByRole('region',{name:'ที่มาของยอดรวมก่อนนำเข้า'});
@@ -187,7 +198,7 @@ test('distinguishes unknown evidence from a reported payout difference on deskto
   const unknown=`UNKNOWN-${stamp}`,reported=`REPORTED-${stamp}`;
   await recordSettlementLine(ctx,{...base,sourceLineId:`UNKNOWN-LINE-${stamp}`,payoutReference:unknown,payoutTotalMinor:31900,amountMinor:31900});
   await recordSettlementLine(ctx,{...base,sourceLineId:`REPORTED-LINE-${stamp}`,payoutReference:reported,payoutTotalMinor:120000,amountMinor:100000,payoutTotalBasis:'reported_total'});
-  await page.setViewportSize({width:1440,height:1000});await signIn(page);await page.getByRole('link',{name:'กระทบยอดเงินโอน',exact:true}).click();
+  await page.setViewportSize({width:1440,height:1000});await signIn(page);await openShopPage(page,'กระทบยอดเงินโอน');
   const table=page.getByRole('heading',{name:'รอบโอน',exact:true}).locator('xpath=ancestor::section');
   const unknownRow=table.getByRole('row').filter({hasText:unknown}),reportedRow=table.getByRole('row').filter({hasText:reported});
   await expect(unknownRow).toContainText('ข้อมูลยังไม่พอ');await expect(unknownRow).toContainText('ยังไม่ทราบที่มาของยอดรวม');await expect(unknownRow).not.toContainText('+฿0.00');
@@ -199,7 +210,7 @@ test('distinguishes unknown evidence from a reported payout difference on deskto
 test('summarizes settlement evidence without AI and preserves an addressable history on mobile',async({page})=>{
   const stamp=Date.now(),order=await importedOrder(stamp,'SYSTEM-SUMMARY'),ctx=await resolveContext(demo.users.owner,demo.tenants.chino),payout=`SUMMARY-${stamp}`;
   await recordSettlementLine(ctx,{shopId:demo.shops.tiktok,sourceLineId:`SUMMARY-LINE-${stamp}`,payoutReference:payout,orderId:order,settledOn:soldOn,payoutTotalMinor:40_000,payoutTotalBasis:'reported_total',amountMinor:31_900,note:'Synthetic summary statement',confirmedStatement:true});
-  await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'กระทบยอดเงินโอน',exact:true}).click();
+  await page.setViewportSize({width:390,height:900});await signIn(page);await openShopPage(page,'กระทบยอดเงินโอน');
   const assistant=page.getByRole('region',{name:'สรุปรายการที่ควรตรวจ'}),systemButton=assistant.getByRole('button',{name:'สรุปจากข้อมูล',exact:true});
   await expect(assistant).toBeVisible();await expect(assistant.getByText('ยังไม่ได้เชื่อมโมเดล AI')).toBeVisible();await expect(assistant.getByRole('button',{name:/AI/})).toHaveCount(0);
   await assistant.getByLabel('จำนวนรายการสำหรับสรุป').selectOption('50');expect(await systemButton.evaluate(element=>element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);await systemButton.click();
@@ -214,7 +225,7 @@ test('requires a human preview and confirmation before creating one evidence-bac
   const pageErrors:string[]=[];page.on('pageerror',error=>pageErrors.push(error.message));
   const stamp=Date.now(),order=await importedOrder(stamp,'HUMAN-TASK'),ctx=await resolveContext(demo.users.owner,demo.tenants.chino),payout=`TASK-${stamp}`;
   await recordSettlementLine(ctx,{shopId:demo.shops.tiktok,sourceLineId:`TASK-LINE-${stamp}`,payoutReference:payout,orderId:order,settledOn:soldOn,payoutTotalMinor:40_000,payoutTotalBasis:'reported_total',amountMinor:31_900,note:'Synthetic human task evidence',confirmedStatement:true});
-  await page.setViewportSize({width:390,height:900});await signIn(page);await page.getByRole('link',{name:'กระทบยอดเงินโอน',exact:true}).click();
+  await page.setViewportSize({width:390,height:900});await signIn(page);await openShopPage(page,'กระทบยอดเงินโอน');
   const assistant=page.getByRole('region',{name:'สรุปรายการที่ควรตรวจ'});await assistant.getByLabel('จำนวนรายการสำหรับสรุป').selectOption('50');await assistant.getByRole('button',{name:'สรุปจากข้อมูล',exact:true}).click();
   const fact=assistant.locator('.settlement-review-facts article').filter({hasText:payout});await expect(fact).toBeVisible();await fact.getByRole('button',{name:'ร่างงานติดตาม',exact:true}).click();
   const composer=assistant.locator('.review-task-composer');await expect(composer.getByRole('heading',{name:'ร่างงานติดตาม',exact:true})).toBeFocused();await expect(composer).toContainText('ไม่แก้ยอด ไม่ซ่อนข้อแตกต่าง');

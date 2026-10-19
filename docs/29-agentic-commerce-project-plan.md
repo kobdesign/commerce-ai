@@ -1,6 +1,6 @@
-# แผนโครงการ Agentic Commerce — revision 1
+# แผนโครงการ Agentic Commerce — revision 2
 
-วันที่: 17 กันยายน 2026 · Change record: SC-2026-09-17-01
+วันที่: 24 กันยายน 2026 · Change records: SC-2026-09-17-01, SC-2026-09-24-01
 
 สถานะ: ปรับแผนตามคำขอผู้ใช้แล้ว เป็น development direction ไม่ใช่การตรวจรับ production หรือคำมั่นกำหนดส่ง การเพิ่มความสามารถต้องผ่านเกณฑ์ของแต่ละช่วง; การปรับแผนครั้งนี้ไม่เปลี่ยน runtime ไม่เปิด external actions และไม่ merge เข้า main
 
@@ -61,6 +61,12 @@ Priority P0 = งานรอบถัดไป/ตัวกั้น pilot ไ�
 
 Cross-cutting: tenancy, observability, cost controls, UX, tests และ security ทำในทุก stage ไม่เลื่อนไปท้ายโครงการ การเปิด Stage B ให้ร้านนำร่องไม่ต้องรอ C/D/E
 
+อัปเดต UX ตามคำขอผู้ใช้ 2026-10-18: ให้ผู้ค้าชาวไทยที่ไม่เคยใช้ระบบเลือกงานจากภาษาธุรกิจและคำแนะนำทีละขั้น โดยคงความสามารถ สิทธิ์ และการยืนยันเดิม เริ่มหน้าแรก/เมนู (UX-MER-01) แล้วปรับเพิ่มสินค้า นำเข้า และการเงินก่อนตรวจรับกับผู้ค้าจริง ดู [แผน UX-MER-01–05](56-merchant-first-ux.md) การปรับหน้าจอไม่ใช่หลักฐานว่า pilot หรือ live integrations พร้อมแล้ว
+
+**Stage C progress:** Product/SKU lifecycle, listing mapping, stock/reservation, internal orders, integration core และ machine ingress identity/lifecycle ส่งมอบใน local แล้วตาม [docs/46](46-product-and-sku-lifecycle.md)–[docs/55](55-service-credential-rotation.md) Event ออกเขียนพร้อม business state; event เข้าตรวจ HMAC, dedup/order/recovery และ delegated tenant/shop/scope/environment/audience พร้อม dual-key rotation ก่อนเข้า operational review โดยยังไม่แตะ business state งานถัดไปคือ CON-API-01a synthetic connector ingress contract ส่วน provider webhook จริง/partial return/refund/safety-stock policy ยังรอ DEC-05/06
+
+**Support Experience track:** Co-browsing เป็นความสามารถสนับสนุนการใช้งาน ไม่เป็น dependency ของ Stage A/B หรือ production pilot แรก ปัจจุบันพักไว้ตามคำขอวันที่ 8 ตุลาคม 2026 โดยคง local synthetic PoC และเอกสารเดิมไว้ ไม่เชื่อม vendor SDK จนกว่าจะมีคำสั่งให้กลับมาดำเนินการ รายละเอียดอยู่ใน [แผน Co-browsing](37-cobrowsing-support-plan.md)
+
 ## 5. ขอบเขตและข้อจำกัดที่เก็บไว้
 
 - ใช้ stack เดิมและ npm workspaces; ยังไม่เพิ่ม Kafka, microservices หรือ vector database จาก vision เพียงอย่างเดียว แผนนี้ไม่เปลี่ยนผู้ให้บริการ hosting
@@ -92,6 +98,8 @@ Cross-cutting: tenancy, observability, cost controls, UX, tests และ securi
 | Service/Agent access | Principal + delegated scope/shop grants, credential rotation/revocation, per-tenant quotas, audit ที่เห็น requester/approver/executor, cache/queue/file/model isolation |
 | External writes | Durable approval, replay protection, policy recheck, execution attempts, payload/data version, expiry, kill switch และ unknown-outcome recovery |
 | Enterprise ตามความต้องการที่ขายจริง | SSO/SCIM, custom roles, separation of duties/multiple approvals, SIEM export, support access audit, RPO/RTO/SLA ตามข้อตกลง |
+| เปิด Co-browsing ให้ tenant นำร่อง | Explicit consent, short-lived single-use session, page allowlist, local masking, persistent stop control, agent SSO/MFA, session audit และ tenant kill switch |
+| Co-browsing ระดับ Enterprise | Data residency/self-hosting, SCIM/custom support roles, SIEM export, retention policy, vendor incident/SLA และ masking regression ผ่านก่อนเสนอขาย |
 | เมื่อลูกค้าต้องการ isolation/region เฉพาะ | Dedicated resources, residency, customer-managed keys และ tenant migration/restore ที่ผ่านการซ้อม ก่อนรับปาก |
 
 ## 8. การวัดคุณค่าและการประเมินระยะเวลา
@@ -104,6 +112,7 @@ Cross-cutting: tenancy, observability, cost controls, UX, tests และ securi
 | คุณภาพ AI | Unsupported claims, evidence access, correction/rejection และเหตุผล; approval rate ไม่ใช่ความถูกต้อง | Engineering + domain reviewer |
 | Unit economics | AI/infra/support ต่อ active tenant และ completed workflow; จับคู่กับรายได้จริงเมื่อมี | Product + Engineering |
 | การใช้งานซ้ำ/ยินดีจ่าย | รอบใช้งานถัดไปและ paid pilot จริง; ไม่อนุมานจากจำนวน API calls | Product |
+| ประสิทธิผล Co-browsing | เปรียบเทียบเวลาแก้ปัญหา, first-contact resolution, abandonment และ CSAT กับเคสประเภทเดียวกัน; รายงาน masking/privacy incident แยก | Support + Product |
 
 เก็บ baseline ก่อนตั้งเป้าเชิงธุรกิจ ไม่มีเป้ารับรอง GMV/conversion/latency จากเอกสารภายนอก รายงาน median และจำนวนตัวอย่าง ไม่สรุปจาก demo เดียว ประเมินงานตามกำลังทีมที่ยืนยันและ dependency; ใช้รอบ 1–2 สัปดาห์เพื่อ demo/ทบทวน ไม่ใช่รับประกันว่าจะส่งครบตามปฏิทินเดิม
 
@@ -115,12 +124,13 @@ Cross-cutting: tenancy, observability, cost controls, UX, tests และ securi
 |---|---|---|
 | DEC-01 | งบ ทีม และผู้รับผิดชอบจริงยังไม่ทราบ | Product / ก่อนกำหนดวันส่งและปริมาณงานต่อรอบ |
 | DEC-02 | Export ปกปิดข้อมูลอย่างน้อยหนึ่งชุดต่อ platform/version พร้อม edge cases และยอดยืนยัน | ร้าน + การเงิน / ก่อนรับรอง adapter และ pilot ของช่องทางนั้น |
-| DEC-03 | Production identity provider และ retention/restore requirements | Engineering + Product / REL-AG-01 ก่อนข้อมูลจริง |
-| DEC-04 | Pilot models, provider/data policy, งบต่อ run/tenant, quality/latency thresholds | Engineering + Product + การเงิน / ก่อน live-model eval และเปิด pilot |
+| DEC-03 | Production identity, evidence storage, retention และ backup/recovery | Proposed options/approval gate ใน docs/43; Engineering + Product + Privacy/Finance / REL-AG-01 ก่อนข้อมูลจริง |
+| DEC-04 | Pilot models, provider/data policy, งบต่อ run/tenant, quality/latency thresholds | Proposed policy/approval gate ใน docs/43; Engineering + Product + การเงิน / ก่อน live-model eval และเปิด pilot |
 | DEC-05 | Connector แรกเสนอ TikTok จากบริบทร้าน; ยืนยันจากงานจริงและสิทธิ์ API | Product + ร้าน / ก่อน CON-API-01; ไม่เพิ่ม Shopify ถ้าไม่มี use case |
 | DEC-06 | Stock authority, inbound inventory, cost valuation และ oversell handling | Operations + การเงิน / ก่อนเปิด stock writes ใน C |
 | DEC-07 | ผู้ขายตามธุรกรรม, payment provider, checkout destination, refund responsibility และ provider eligibility | Product + ผู้เชี่ยวชาญที่เกี่ยวข้อง / ก่อน E; ไม่อนุมานจากการมี public spec |
 | DEC-08 | Role ผู้สร้าง/รับงาน: owner/finance; auditor อ่านอย่างเดียวใน slice แรก | Product + การเงิน / ตรวจรับ FIN-AI-04 ก่อนใช้จริง; ไม่ขยายสิทธิ์ marketing/operator |
+| DEC-09 | เลือก Co-browsing vendor/hosting/region, ข้อมูลที่แชร์, recording/retention และ integration กับ support desk | Security + Support + Engineering + Product / หลัง SUPPORT-01 PoC และก่อน SUPPORT-02 pilot |
 
 ระหว่างรอข้อมูลจริงพัฒนา FIN-AI-01–05 ด้วย synthetic fixtures ได้ แต่ห้ามเปลี่ยนสถานะ adapter เป็น verified หรือรายงานผลประโยชน์จริง ไม่มีการขอสิทธิ์เชื่อมต่อ ซื้อบริการ หรือติดต่อผู้อื่นอัตโนมัติจากแผนนี้
 
@@ -139,3 +149,8 @@ References ตรวจระหว่างการวิเคราะห์
 - [Active backlog และงานเดิม](04-backlog.md)
 - [เกณฑ์ตรวจรับ](05-verification.md)
 - [Slice แรก: AI ช่วยตรวจเงินและงานติดตาม](30-financial-review-assistant-slice.md)
+- [Support Experience: Co-browsing](37-cobrowsing-support-plan.md)
+
+### SC-2026-09-24-01 — Co-browsing support direction
+
+เพิ่ม Co-browsing เป็นสายงานรองรับลูกค้าโดยต่อยอด identity, tenancy และ audit เดิม ไม่สร้าง remote-desktop engine เองในช่วงแรก เป้าหมายแรกคือ view-only บนหน้าเว็บของแพลตฟอร์ม พร้อมการยินยอมและ field masking; remote control, full desktop, recording และการส่งข้อมูลหน้าจอให้ AI อยู่นอก pilot แรก งานนี้ไม่เปลี่ยนลำดับ DATA-AG-01 → REL-AG-01 และไม่ถือเป็นการอนุมัติซื้อบริการหรือเปิดข้อมูลจริงให้ vendor

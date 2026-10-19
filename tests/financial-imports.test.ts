@@ -3,9 +3,10 @@ import { afterAll,describe,expect,it } from 'vitest';
 import { closePools,resolveContext,withTenant } from '@commerce/db';
 import { createProductFamily,demo,getProductForEdit,updateProduct } from '@commerce/domain';
 import { commitDraft,financialSummary,previewImport,resolveMissingCost,reviewItems,saveDraft } from '@commerce/imports';
+import { bangkokBusinessDate } from './support/time.js';
 
 afterAll(closePools);
-const today=new Date().toISOString().slice(0,10);
+const today=bangkokBusinessDate();
 const mapping={orderId:'order_id',sku:'sku',quantity:'quantity',date:'date',netSales:'net_receipt',platformFee:'platform_fee'};
 async function fixture(costMinor:number|null=18000){
   const ctx=await resolveContext(demo.users.owner,demo.tenants.chino),sku=`FIN-${randomUUID()}`;

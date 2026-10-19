@@ -4,9 +4,10 @@ import { closePools,resolveContext,withTenant } from '@commerce/db';
 import { createProductFamily,demo } from '@commerce/domain';
 import { commitDraft,financialSummary,saveDraft } from '@commerce/imports';
 import { applyFinancialEvents,financialEvents,recordFinancialEvent,reverseFinancialEvent,type FinancialEventType } from '@commerce/finance';
+import { bangkokBusinessDate } from './support/time.js';
 
 afterAll(closePools);
-const today=new Date().toISOString().slice(0,10);
+const today=bangkokBusinessDate();
 const mapping={orderId:'order_id',sourceLineId:'source_line_id',sku:'sku',quantity:'quantity',date:'date',netSales:'net_receipt',platformFee:'platform_fee'};
 
 async function sale(lines=1){

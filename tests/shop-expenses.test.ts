@@ -3,9 +3,10 @@ import { afterAll,describe,expect,it } from 'vitest';
 import { closePools,resolveContext,withTenant } from '@commerce/db';
 import { createShop,demo } from '@commerce/domain';
 import { applyShopExpenses,recordShopExpense,reverseShopExpense,shopExpenses,type ExpenseAllocationScope,type ShopExpenseType } from '@commerce/finance';
+import { bangkokBusinessDate } from './support/time.js';
 
 afterAll(closePools);
-const today=new Date().toISOString().slice(0,10);
+const today=bangkokBusinessDate();
 
 async function isolatedShop(){
   const ctx=await resolveContext(demo.users.owner,demo.tenants.chino);

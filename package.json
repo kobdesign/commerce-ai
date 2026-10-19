@@ -23,9 +23,19 @@
     "lint": "eslint apps packages scripts tests --max-warnings 0",
     "test": "node --env-file-if-exists=.env scripts/test.mjs",
     "test:e2e": "node --env-file-if-exists=.env node_modules/@playwright/test/cli.js test",
+    "readiness:check": "node --env-file-if-exists=.env --import tsx scripts/check-readiness.ts",
+    "release:preflight": "node --env-file-if-exists=.env --import tsx scripts/check-release-configuration.ts",
+    "release:decisions": "node --import tsx scripts/check-production-decisions.ts",
+    "ops:status": "node --env-file-if-exists=.env --import tsx scripts/operational-controls.ts status",
+    "ops:control": "node --env-file-if-exists=.env --import tsx scripts/operational-controls.ts",
+    "monitor:once": "node --env-file-if-exists=.env --import tsx scripts/monitor-runtime.ts --once",
+    "monitor:start": "node --env-file-if-exists=.env --import tsx scripts/monitor-runtime.ts",
+    "ops:rehearse-incident": "node --env-file-if-exists=.env --import tsx scripts/rehearse-incident-controls.ts",
     "eval:finance:readiness": "node --env-file-if-exists=.env --import tsx scripts/financial-review-eval-readiness.ts",
     "data:prepare-statement": "node --env-file-if-exists=.env --import tsx scripts/prepare-settlement-sample.ts",
-    "data:verify-statement": "node --env-file-if-exists=.env --import tsx scripts/verify-settlement-sample.ts"
+    "data:verify-statement": "node --env-file-if-exists=.env --import tsx scripts/verify-settlement-sample.ts",
+    "data:verify-storage": "node --env-file-if-exists=.env --import tsx scripts/verify-evidence-storage.ts",
+    "db:rehearse-restore": "node --env-file-if-exists=.env --import tsx scripts/rehearse-local-restore.ts"
   },
   "dependencies": {
     "@fontsource/noto-sans-thai": "5.3.0",

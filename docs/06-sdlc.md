@@ -54,7 +54,7 @@ Discovery → Requirements/acceptance → Architecture/data contracts → Small 
 
 ## Incident และ learning
 
-กำหนดผู้รับผิดชอบ การหยุด workflow/AI การเพิกถอน credentials วิธีประเมินผลกระทบ tenant และช่องทางแจ้งลูกค้าก่อน production บันทึก root cause และเพิ่ม regression test หลัง incident
+กำหนดผู้รับผิดชอบ การหยุด workflow/AI การเพิกถอน credentials วิธีประเมินผลกระทบ tenant และช่องทางแจ้งลูกค้าก่อน production บันทึก root cause และเพิ่ม regression test หลัง incident ใช้ configuration gate และ operational controls ตาม [runbook v1.15](41-production-configuration-and-incident-gates.md); การเปิดกลับต้องมี actor/reason และ recovery evidence
 
 ผู้ดูแลตรวจ usage/error budget ตาม cadence ที่กำหนด ไม่ส่ง notification ที่ไม่ actionable ทุก run
 

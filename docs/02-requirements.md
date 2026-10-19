@@ -61,8 +61,9 @@ Agent ไม่มีสิทธิ์เพิ่มจากบทบาท�
 | FR-23 | D: Published catalog & machine access | Merchant consent, published projection แยก finance, revoke/scope/tenant tests; freshness ชัดเจน; ไม่มี stock ไม่อ้าง availability |
 | FR-24 | E: Checkout & payment orchestration | แยก checkout/payment/order/fulfillment/return/refund; timeout/expiry/replay recovery; approval ไม่ใช่ execution success |
 | FR-25 | C–E: Channel attribution | เก็บ discovery source, checkout channel, protocol และ payment provider แยก; AI referral ไม่ทำให้เกิด order ซ้ำ |
+| FR-26 | Support: Consent-based Co-browsing | ลูกค้าเริ่ม/ยินยอม/หยุด session ได้; ค่าเริ่มต้น view-only และจำกัดหน้า; support ไม่มีสิทธิ์อ่าน tenant อื่นหรือข้อมูลปกปิด; code ใช้ครั้งเดียวและหมดอายุ |
 
-FR-15–18 ตรวจตาม [FA-T01–10](30-financial-review-assistant-slice.md); FR-19–25 มี boundary tests ใน [verification](05-verification.md) และต้องแตก acceptance fixtures ตาม workflow/provider ก่อนเริ่มงานแต่ละส่วน
+FR-15–18 ตรวจตาม [FA-T01–10](30-financial-review-assistant-slice.md); FR-19–26 มี boundary tests ใน [verification](05-verification.md) และต้องแตก acceptance fixtures ตาม workflow/provider ก่อนเริ่มงานแต่ละส่วน
 
 ## Non-functional requirements
 
@@ -78,11 +79,12 @@ FR-15–18 ตรวจตาม [FA-T01–10](30-financial-review-assistant-sli
 | NFR-08 | Data lifecycle | กำหนด retention/delete/export ครอบคลุม raw files, derived data, AI และ backup lifecycle |
 | NFR-09 | Security baseline | secrets แยก environment, encryption, admin MFA, dependency/secret scans |
 | NFR-10 | Performance | ตั้งเกณฑ์ด้วยจำนวนออเดอร์/ขนาดไฟล์ที่สำรวจจริง; ยังไม่กล่าวอ้าง throughput |
+| NFR-11 | Co-browsing privacy & containment | mask ที่ browser ก่อนส่ง, ไม่ส่ง cookies/tokens/hidden state, ผูก session กับ tenant/user/case/agent/origin, มี timeout/revocation/audit/kill switch และ masking regression ทุก release ที่เปิด feature |
 
 ## Enterprise roadmap
 
 รากฐาน MVP: tenant grants, audit, entitlement, usage, policy settings, export, routing abstraction และ approval data model
 
-เปิดก่อนรับลูกค้าที่ต้องใช้: SAML/OIDC SSO, SCIM, custom roles, multiple approval levels, SIEM export, dedicated resources, regional residency, customer-managed keys, ERP integration, SLA/DR ตามสัญญา
+เปิดก่อนรับลูกค้าที่ต้องใช้: SAML/OIDC SSO, SCIM, custom roles, multiple approval levels, SIEM export, dedicated resources, regional residency, customer-managed keys, ERP integration, Co-browsing residency/retention/support-access controls และ SLA/DR ตามสัญญา
 
 เอกสารนี้ไม่ใช่การรับรอง compliance หรือคำสัญญาว่าฟีเจอร์ roadmap เปิดใช้แล้ว

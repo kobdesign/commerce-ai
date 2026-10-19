@@ -1,0 +1,71 @@
+{
+  "status": "passed",
+  "startedAt": "2026-09-27T14:43:13.037Z",
+  "completedAt": "2026-09-27T14:43:14.545Z",
+  "dumpBytes": 661498,
+  "dumpMs": 303,
+  "restoreMs": 931,
+  "verifyMs": 59,
+  "observedRecoveryMs": 990,
+  "source": {
+    "evidenceCount": 142,
+    "tableCounts": {
+      "app.tenants": 3,
+      "app.memberships": 7,
+      "app.shops": 4,
+      "app.shop_grants": 1,
+      "app.products": 239,
+      "app.variants": 612,
+      "app.cost_versions": 342,
+      "app.import_sources": 120,
+      "app.import_drafts": 224,
+      "app.import_batches": 188,
+      "app.sales_lines": 188,
+      "app.financial_events": 53,
+      "app.shop_expenses": 36,
+      "app.settlement_import_batches": 22,
+      "app.settlement_lines": 71,
+      "app.evidence_objects": 142,
+      "app.financial_review_tasks": 12,
+      "app.audit_events": 1223
+    }
+  },
+  "restored": {
+    "evidenceCount": 142,
+    "corruptEvidence": 0,
+    "tableCounts": {
+      "app.tenants": 3,
+      "app.memberships": 7,
+      "app.shops": 4,
+      "app.shop_grants": 1,
+      "app.products": 239,
+      "app.variants": 612,
+      "app.cost_versions": 342,
+      "app.import_sources": 120,
+      "app.import_drafts": 224,
+      "app.import_batches": 188,
+      "app.sales_lines": 188,
+      "app.financial_events": 53,
+      "app.shop_expenses": 36,
+      "app.settlement_import_batches": 22,
+      "app.settlement_lines": 71,
+      "app.evidence_objects": 142,
+      "app.financial_review_tasks": 12,
+      "app.audit_events": 1223
+    }
+  },
+  "checks": {
+    "manifestMatch": true,
+    "migrationsMatch": true,
+    "rlsMatch": true,
+    "runtimeRoles": {
+      "application": true,
+      "identity": true,
+      "queue": true
+    }
+  },
+  "scope": "local rehearsal only",
+  "rpo": "not established",
+  "rto": "observed duration only; no production objective approved",
+  "totalMs": 1508
+}

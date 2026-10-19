@@ -5,9 +5,10 @@ import { closePools,resolveContext,withTenant } from '@commerce/db';
 import { createProductFamily,demo } from '@commerce/domain';
 import { commitDraft,saveDraft } from '@commerce/imports';
 import { commitMarketplaceSettlement,commitSettlementImport,getSettlementImportSource,inspectMarketplaceSettlement,inspectSettlementFile,previewSettlementImport,settlementImportBatches,settlements,reverseSettlementLine } from '@commerce/finance';
+import { bangkokBusinessDate } from './support/time.js';
 
 afterAll(closePools);
-const today=new Date().toISOString().slice(0,10);
+const today=bangkokBusinessDate();
 const orderMapping={orderId:'order_id',sourceLineId:'source_line_id',sku:'sku',quantity:'quantity',date:'date',netSales:'net_receipt',platformFee:'platform_fee'};
 const settlementMapping={payoutReference:'payout_reference',settledOn:'settled_on',payoutTotal:'payout_total',sourceLineId:'source_line_id',orderId:'order_id',amount:'allocation_amount',note:'note'};
 
@@ -41,6 +42,9 @@ describe('Settlement CSV imports',()=>{
     expect(batch).toMatchObject({filename:input.filename,total:2,payoutCount:1,unmatchedLineCount:0});
     const source=await getSettlementImportSource(ctx,committed.id);
     expect(source.content.toString('utf8')).toBe(input.csv);expect(source.sourceHash).toBe(preview.sourceHash);
+    const [storage]=await withTenant(ctx,tx=>tx.query<{storage_backend:string;retention_class:string;lifecycle_status:string;linked:boolean}>(`SELECT e.storage_backend,e.retention_class,e.lifecycle_status,(b.evidence_object_id=e.id) AS linked
+      FROM app.settlement_import_batches b JOIN app.evidence_objects e ON e.tenant_id=b.tenant_id AND e.id=b.evidence_object_id WHERE b.id=$1`,[committed.id]));
+    expect(storage).toEqual({storage_backend:'postgres-inline-v1',retention_class:'financial-evidence',lifecycle_status:'active',linked:true});
   });
 
   it('blocks duplicate source IDs and inconsistent payout summaries before commit',async()=>{

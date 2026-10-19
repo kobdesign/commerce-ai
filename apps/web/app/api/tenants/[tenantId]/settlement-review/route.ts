@@ -1,5 +1,5 @@
 import { executeSettlementReview,settlementReviewRuns } from '@commerce/ai';
-import { apiContext,jsonInput,respond } from '../../../../../lib/server';
+import { apiContext,mutationInput,respond } from '../../../../../lib/server';
 
 export const maxDuration=60;
 type Params={params:Promise<{tenantId:string}>};
@@ -13,5 +13,5 @@ export async function GET(req:Request,{params}:Params){
 }
 
 export async function POST(req:Request,{params}:Params){
-  return respond(async()=>executeSettlementReview(await apiContext((await params).tenantId),await jsonInput(req)));
+  return respond(async()=>executeSettlementReview(await apiContext((await params).tenantId),await mutationInput(req)));
 }

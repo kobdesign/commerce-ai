@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll,describe,expect,it } from 'vitest';
 import { Pool } from 'pg';
 import { closePools,resolveContext,withTenant } from '@commerce/db';
-import { catalog,createProductFamily,demo,getProductForEdit,updateProduct,type ProductForEdit } from '@commerce/domain';
+import { catalog,createProductFamily,demo,getProductForEdit,setProductLifecycle,updateProduct,type ProductForEdit } from '@commerce/domain';
 import { previewImport } from '@commerce/imports';
 import { productFamilyInput,productUpdateInput } from '@commerce/contracts';
 
@@ -79,5 +79,46 @@ describe('Existing product editing',()=>{
    await expect(withTenant(limited,tx=>tx.query('INSERT INTO app.cost_versions(tenant_id,id,variant_id,amount_minor) VALUES($1,$2,$3,$4)',[ctx.tenantId,randomUUID(),product.variants[0].id,1]))).rejects.toMatchObject({code:'42501'});
   }finally{await admin.query("UPDATE app.memberships SET role='operator' WHERE tenant_id=$1 AND user_id=$2",[ctx.tenantId,demo.users.limited]);}
   await updateProduct(ctx,product.id,{...payload(product),name:'Owner can edit shared product'});
+ });
+});
+
+describe('Product and SKU lifecycle',()=>{
+ it('archives and restores one SKU while keeping the product, cost and audit history',async()=>{
+  const {ctx,product}=await fixture(),variant=product.variants[0];
+  const archived=await setProductLifecycle(ctx,product.id,{shopId:demo.shops.tiktok,version:product.version,target:{type:'variant',variantId:variant.id},action:'archive',reason:'หยุดขายไซซ์นี้ชั่วคราว'});
+  expect(archived).toMatchObject({variantId:variant.id,version:2,archived:true});
+  expect((await catalog(ctx,demo.shops.tiktok)).items.find(v=>v.id===variant.id)).toBeUndefined();
+  expect((await catalog(ctx,demo.shops.tiktok,'','archived')).items.find(v=>v.id===variant.id)).toMatchObject({variantArchived:true,archiveReason:'หยุดขายไซซ์นี้ชั่วคราว'});
+  const current=await getProductForEdit(ctx,demo.shops.tiktok,product.id);
+  expect(current.variants.find(v=>v.id===variant.id)).toMatchObject({archived:true,costMinor:variant.costMinor});
+  expect(current.history).toEqual(product.history);
+  await setProductLifecycle(ctx,product.id,{shopId:demo.shops.tiktok,version:current.version,target:{type:'variant',variantId:variant.id},action:'restore',reason:'สินค้ากลับมาพร้อมขายแล้ว'});
+  expect((await catalog(ctx,demo.shops.tiktok)).items.find(v=>v.id===variant.id)).toMatchObject({variantArchived:false});
+  expect(await withTenant(ctx,tx=>tx.query("SELECT action FROM app.audit_events WHERE entity_id=$1 AND action IN ('variant.archived','variant.restored') ORDER BY created_at",[variant.id]))).toEqual([{action:'variant.archived'},{action:'variant.restored'}]);
+ });
+ it('archives a whole product without erasing per-SKU state and still resolves historical imports',async()=>{
+  const {ctx,product}=await fixture(),variant=product.variants[0];
+  await setProductLifecycle(ctx,product.id,{shopId:demo.shops.tiktok,version:product.version,target:{type:'variant',variantId:variant.id},action:'archive',reason:'SKU นี้หมดก่อนรายการอื่น'});
+  let current=await getProductForEdit(ctx,demo.shops.tiktok,product.id);
+  await setProductLifecycle(ctx,product.id,{shopId:demo.shops.tiktok,version:current.version,target:{type:'product'},action:'archive',reason:'หยุดขายสินค้าทั้งรุ่นชั่วคราว'});
+  current=await getProductForEdit(ctx,demo.shops.tiktok,product.id);expect(current.archived).toBe(true);
+  expect((await catalog(ctx,demo.shops.tiktok)).items.filter(v=>v.productId===product.id)).toEqual([]);
+  expect((await catalog(ctx,demo.shops.tiktok,'','archived')).items.filter(v=>v.productId===product.id)).toHaveLength(2);
+  await expect(setProductLifecycle(ctx,product.id,{shopId:demo.shops.tiktok,version:current.version,target:{type:'variant',variantId:variant.id},action:'restore',reason:'ต้องการเปิด SKU ก่อน'})).rejects.toMatchObject({code:'PRODUCT_ARCHIVED'});
+  await setProductLifecycle(ctx,product.id,{shopId:demo.shops.tiktok,version:current.version,target:{type:'product'},action:'restore',reason:'เปิดขายสินค้ารุ่นนี้อีกครั้ง'});
+  const active=(await catalog(ctx,demo.shops.tiktok)).items.filter(v=>v.productId===product.id),inactive=(await catalog(ctx,demo.shops.tiktok,'','archived')).items.filter(v=>v.productId===product.id);
+  expect(active).toHaveLength(1);expect(inactive).toHaveLength(1);expect(inactive[0].id).toBe(variant.id);
+  const preview=await previewImport(ctx,{shopId:demo.shops.tiktok,filename:'archived-sku.csv',delimiter:',',csv:`order_id,sku,quantity,date,net_sales\nLIFE-1,${variant.sku},1,2026-09-16,100`,mapping:{orderId:'order_id',sku:'sku',quantity:'quantity',date:'date',netSales:'net_sales'}});
+  expect(preview.rows[0].sku).toBe(variant.sku);expect(preview.rows[0].warnings).not.toContain('ไม่พบ SKU ในร้านนี้');
+ });
+ it('enforces reason, optimistic version, tenant and role boundaries',async()=>{
+  const {ctx,product}=await fixture(),variant=product.variants[0],input={shopId:demo.shops.tiktok,version:product.version,target:{type:'variant' as const,variantId:variant.id},action:'archive' as const,reason:'พักขายเพื่อทดสอบ'};
+  await expect(setProductLifecycle(ctx,product.id,{...input,reason:'x'})).rejects.toBeTruthy();
+  await setProductLifecycle(ctx,product.id,input);
+  await expect(setProductLifecycle(ctx,product.id,{...input,target:{type:'variant',variantId:product.variants[1].id}})).rejects.toMatchObject({code:'STALE_PRODUCT'});
+  const marketing=await resolveContext(demo.users.marketing,ctx.tenantId),other=await resolveContext(demo.users.other,demo.tenants.goods);
+  await expect(setProductLifecycle(marketing,product.id,{...input,version:2})).rejects.toMatchObject({status:403});
+  await expect(setProductLifecycle(other,product.id,{...input,shopId:demo.shops.goods,version:2})).rejects.toMatchObject({status:404});
+  expect(await withTenant(marketing,tx=>tx.query('UPDATE app.variants SET archived_at=clock_timestamp(),archived_by=$1,archive_reason=$2 WHERE id=$3 RETURNING id',[marketing.userId,'พยายามเปลี่ยนตรง',variant.id]))).toEqual([]);
  });
 });

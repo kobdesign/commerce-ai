@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-09-27",
+  "status": "synthetic-core-ready-vendor-sandbox-pending",
+  "pocCandidates": ["cobrowse-io", "unblu"],
+  "comparisonOnly": ["surfly", "genesys-cloud-cobrowse"],
+  "pilotPolicy": {
+    "mode": "view-only",
+    "privateByDefault": true,
+    "recording": false,
+    "remoteControl": false,
+    "fullDeviceSharing": false,
+    "sessionTtlMinutes": 10,
+    "allowedPageClasses": ["catalog", "imports", "settlements", "reviews"],
+    "blockedPageClasses": ["login", "team", "raw-evidence-download", "payment", "admin"],
+    "requiredMaskedSelectors": [
+      "input[type=\"password\"]",
+      "[data-support-secret]",
+      "[data-support-pii]",
+      "[data-support-financial]",
+      "[data-support-evidence]"
+    ]
+  },
+  "decision": {
+    "id": "DEC-09",
+    "status": "pending-vendor-sandbox-and-owner-review",
+    "requiredApprovers": ["security", "support", "engineering", "product"]
+  }
+}

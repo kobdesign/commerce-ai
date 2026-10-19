@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { AppError,uuid,type Context,type PayoutTotalBasis } from '@commerce/contracts';
 import { withTenant,type Tx } from '@commerce/db';
 import { assertShop,audit } from '@commerce/domain';
+import { readEvidenceObject,storeEvidenceObject,verifyLegacyEvidence } from '@commerce/storage';
 import { marketplaceSettlementAdapters,parseMarketplaceSettlement,type MarketplaceDetectionMiss,type MarketplaceSettlementAdapterKey,type MarketplaceSettlementSource,type ParsedMarketplaceSettlement } from './settlement-adapters';
 
 export * from './settlement-adapters';
@@ -172,9 +173,10 @@ export async function commitMarketplaceSettlement(ctx:Context,input:unknown){
     const {preview}=await previewMarketplaceParsed(tx,ctx,data,parsed);
     if(preview.invalid||preview.valid!==preview.total)throw new AppError(409,'SETTLEMENT_IMPORT_HAS_ERRORS','แก้รายการที่ไม่ผ่านการตรวจก่อนยืนยันนำเข้า');
     const batchId=randomUUID();
-    const inserted=await tx.query<{id:string}>(`INSERT INTO app.settlement_import_batches(tenant_id,id,shop_id,actor_id,filename,content_type,byte_size,source_hash,fingerprint,delimiter,adapter_key,schema_version,parser_version,mapping,preview,content)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-      ON CONFLICT(tenant_id,shop_id,fingerprint) DO NOTHING RETURNING id`,[ctx.tenantId,batchId,data.shopId,ctx.userId,data.filename,parsed.contentType,parsed.sourceBytes.byteLength,parsed.sourceHash,fingerprint,parsed.delimiter,parsed.adapterKey,parsed.schemaVersion,marketplaceParserVersion,JSON.stringify({sheetName:parsed.sheetName,canonical:canonicalMarketplaceMapping}),JSON.stringify(preview),parsed.sourceBytes]);
+    const evidence=await storeEvidenceObject(tx,ctx,{shopId:data.shopId,contentType:parsed.contentType,content:parsed.sourceBytes,sourceHash:parsed.sourceHash});
+    const inserted=await tx.query<{id:string}>(`INSERT INTO app.settlement_import_batches(tenant_id,id,shop_id,actor_id,filename,content_type,byte_size,source_hash,fingerprint,delimiter,adapter_key,schema_version,parser_version,mapping,preview,content,evidence_object_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      ON CONFLICT(tenant_id,shop_id,fingerprint) DO NOTHING RETURNING id`,[ctx.tenantId,batchId,data.shopId,ctx.userId,data.filename,parsed.contentType,parsed.sourceBytes.byteLength,parsed.sourceHash,fingerprint,parsed.delimiter,parsed.adapterKey,parsed.schemaVersion,marketplaceParserVersion,JSON.stringify({sheetName:parsed.sheetName,canonical:canonicalMarketplaceMapping}),JSON.stringify(preview),parsed.sourceBytes,evidence.id]);
     if(!inserted.length){
       const [existing]=await tx.query<{id:string}>('SELECT id FROM app.settlement_import_batches WHERE shop_id=$1 AND fingerprint=$2',[data.shopId,fingerprint]);
       if(!existing)throw new AppError(409,'SETTLEMENT_IMPORT_CONFLICT','ไม่สามารถยืนยันไฟล์นี้ได้ กรุณาลองใหม่');
@@ -207,9 +209,10 @@ export async function commitSettlementImport(ctx:Context,input:unknown){
     const preview=await analyze(tx,ctx,data);
     if(preview.invalid||preview.valid!==preview.total)throw new AppError(409,'SETTLEMENT_IMPORT_HAS_ERRORS','แก้รายการที่ไม่ผ่านการตรวจก่อนยืนยันนำเข้า');
     const batchId=randomUUID(),bytes=Buffer.from(data.csv,'utf8');
-    const inserted=await tx.query<{id:string}>(`INSERT INTO app.settlement_import_batches(tenant_id,id,shop_id,actor_id,filename,byte_size,source_hash,fingerprint,delimiter,adapter_key,schema_version,parser_version,mapping,preview,content)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-      ON CONFLICT(tenant_id,shop_id,fingerprint) DO NOTHING RETURNING id`,[ctx.tenantId,batchId,data.shopId,ctx.userId,data.filename,bytes.byteLength,preview.sourceHash,fingerprint,data.delimiter,adapterKey,schemaVersion,parserVersion,JSON.stringify(data.mapping),JSON.stringify(preview),bytes]);
+    const evidence=await storeEvidenceObject(tx,ctx,{shopId:data.shopId,contentType:'text/csv',content:bytes,sourceHash:preview.sourceHash});
+    const inserted=await tx.query<{id:string}>(`INSERT INTO app.settlement_import_batches(tenant_id,id,shop_id,actor_id,filename,byte_size,source_hash,fingerprint,delimiter,adapter_key,schema_version,parser_version,mapping,preview,content,evidence_object_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+      ON CONFLICT(tenant_id,shop_id,fingerprint) DO NOTHING RETURNING id`,[ctx.tenantId,batchId,data.shopId,ctx.userId,data.filename,bytes.byteLength,preview.sourceHash,fingerprint,data.delimiter,adapterKey,schemaVersion,parserVersion,JSON.stringify(data.mapping),JSON.stringify(preview),bytes,evidence.id]);
     if(!inserted.length){
       const [existing]=await tx.query<{id:string}>('SELECT id FROM app.settlement_import_batches WHERE shop_id=$1 AND fingerprint=$2',[data.shopId,fingerprint]);
       if(!existing)throw new AppError(409,'SETTLEMENT_IMPORT_CONFLICT','ไม่สามารถยืนยันไฟล์นี้ได้ กรุณาลองใหม่');
@@ -242,10 +245,12 @@ export async function getSettlementImportSource(ctx:Context,batchId:string):Prom
   const id=uuid.parse(batchId);
   return withTenant(ctx,async(tx,role)=>{
     access(role,false);
-    const [source]=await tx.query<SettlementImportDownload&{shopId:string}>(`SELECT shop_id AS "shopId",filename,content_type AS "contentType",byte_size AS "byteSize",source_hash AS "sourceHash",content
+    const [source]=await tx.query<SettlementImportDownload&{shopId:string;evidenceObjectId:string|null}>(`SELECT shop_id AS "shopId",filename,content_type AS "contentType",byte_size AS "byteSize",source_hash AS "sourceHash",content,evidence_object_id AS "evidenceObjectId"
       FROM app.settlement_import_batches WHERE id=$1`,[id]);
     if(!source)throw new AppError(404,'SETTLEMENT_SOURCE_NOT_FOUND','ไม่พบไฟล์ statement ต้นฉบับในร้านนี้');
+    const content=source.evidenceObjectId?(await readEvidenceObject(tx,source.evidenceObjectId)).content:source.content;
+    if(!source.evidenceObjectId)verifyLegacyEvidence(content,source.byteSize,source.sourceHash);
     await audit(tx,ctx,'settlement.import.source.downloaded',id,{shopId:source.shopId,sourceHash:source.sourceHash,byteSize:source.byteSize});
-    return {filename:source.filename,contentType:source.contentType,byteSize:source.byteSize,sourceHash:source.sourceHash,content:source.content};
+    return {filename:source.filename,contentType:source.contentType,byteSize:source.byteSize,sourceHash:source.sourceHash,content};
   });
 }

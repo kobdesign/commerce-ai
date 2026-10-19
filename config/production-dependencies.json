@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-09-27",
+  "decisions": [
+    {
+      "id": "DEC-03-IDENTITY",
+      "status": "proposed",
+      "recommendedOption": "workos-authkit",
+      "ownerRole": "Product + Engineering + Security/Privacy",
+      "requiredBefore": "production customer login",
+      "selectedOption": null,
+      "approvedBy": [],
+      "approvedAt": null,
+      "evidence": []
+    },
+    {
+      "id": "DEC-03-EVIDENCE-STORAGE",
+      "status": "proposed",
+      "recommendedOption": "aws-s3-ap-southeast-1-sse-kms",
+      "ownerRole": "Engineering + Security/Privacy",
+      "requiredBefore": "uploading real statements",
+      "selectedOption": null,
+      "approvedBy": [],
+      "approvedAt": null,
+      "evidence": []
+    },
+    {
+      "id": "DEC-03-RETENTION",
+      "status": "proposed",
+      "recommendedOption": "purpose-bound-versioned-tenant-policy",
+      "ownerRole": "Business + Finance + Privacy/Legal",
+      "requiredBefore": "uploading real statements",
+      "selectedOption": null,
+      "approvedBy": [],
+      "approvedAt": null,
+      "evidence": []
+    },
+    {
+      "id": "DEC-03-BACKUP-RECOVERY",
+      "status": "proposed",
+      "recommendedOption": "render-paid-pitr-plus-daily-s3-logical-backup",
+      "ownerRole": "Business + Engineering",
+      "requiredBefore": "production pilot",
+      "selectedOption": null,
+      "approvedBy": [],
+      "approvedAt": null,
+      "evidence": []
+    },
+    {
+      "id": "DEC-04-AI-POLICY",
+      "status": "proposed",
+      "recommendedOption": "openai-api-data-minimized-zdr-preferred",
+      "ownerRole": "Product + Finance + Security/Privacy",
+      "requiredBefore": "live model evaluation",
+      "selectedOption": null,
+      "approvedBy": [],
+      "approvedAt": null,
+      "evidence": []
+    },
+    {
+      "id": "OPS-ALERT-OWNERSHIP",
+      "status": "proposed",
+      "recommendedOption": "better-stack-external-monitor-with-primary-and-backup-owner",
+      "ownerRole": "Business + Engineering + Support",
+      "requiredBefore": "staging incident rehearsal",
+      "selectedOption": null,
+      "approvedBy": [],
+      "approvedAt": null,
+      "evidence": []
+    }
+  ]
+}

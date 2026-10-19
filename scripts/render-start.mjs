@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 const service=process.argv[2];
 if(!['web','worker'].includes(service))throw new Error('Usage: node scripts/render-start.mjs <web|worker>');
 if(process.env.APP_MODE!=='staging-demo')throw new Error('Render pilot startup requires APP_MODE=staging-demo.');
+await run(['--import','tsx','scripts/check-release-configuration.ts',service],process.env);
 
 let adminUrl=process.env.ADMIN_DATABASE_URL;
 if(!adminUrl)throw new Error('ADMIN_DATABASE_URL is required during startup.');

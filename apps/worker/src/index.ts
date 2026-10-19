@@ -3,11 +3,14 @@ import { Pool } from 'pg';
 import { PgBoss } from 'pg-boss';
 import { z } from 'zod';
 import { AppError } from '@commerce/contracts';
-import { resolveContext,withTenant,closePools } from '@commerce/db';
+import { resolveContext,withTenant,closePools,touchServiceHeartbeat,stopServiceHeartbeat,operationalControlEnabled } from '@commerce/db';
+import { assertDeploymentConfiguration } from '@commerce/operations';
 import { catalogEvidence } from '@commerce/ai';
 import { audit } from '@commerce/domain';
 import { commitDraft } from '@commerce/imports';
+import { activeOutboxConsumers,claimOutboxDeliveries,consumeInternalOutboxDelivery,failOutboxDelivery,type OutboxDelivery } from '@commerce/integrations';
 
+assertDeploymentConfiguration('worker');
 if(!process.env.QUEUE_DATABASE_URL)throw new Error('QUEUE_DATABASE_URL required');
 const queueConnection=process.env.QUEUE_DATABASE_URL;
 const workerName=`${hostname().slice(0,80)}:${process.pid}`;
@@ -17,6 +20,18 @@ boss.on('error',()=>console.error('Queue error; inspect database connectivity.')
 
 await boss.start();
 await boss.createQueue('catalog-check',{retryLimit:1,expireInSeconds:60});
+await touchServiceHeartbeat('worker',workerName);
+async function reportHeartbeat(){
+  try{await touchServiceHeartbeat('worker',workerName);}
+  catch{console.error('Worker heartbeat failed; readiness will report unavailable.');}
+}
+let heartbeatInFlight:Promise<void>|null=null;
+function scheduleHeartbeat(){
+  if(heartbeatInFlight)return;
+  heartbeatInFlight=reportHeartbeat().finally(()=>{heartbeatInFlight=null;});
+}
+const heartbeatTimer=setInterval(scheduleHeartbeat,15_000);
+heartbeatTimer.unref();
 const catalogPayload=z.object({userId:z.string().uuid(),tenantId:z.string().uuid(),shopId:z.string().uuid()}).strict();
 await boss.work('catalog-check',async jobs=>{
   for(const job of jobs){
@@ -34,6 +49,7 @@ const importJob=z.object({
 type ImportJob=z.infer<typeof importJob>;
 
 async function claimImports():Promise<ImportJob[]>{
+  if(!await operationalControlEnabled('import_commits'))return [];
   await queuePool.query(`UPDATE app.import_commit_jobs SET status='failed',error_code='WORKER_TIMEOUT',error_message='งานหยุดก่อนเสร็จและลองใหม่ครบ 3 ครั้งแล้ว',completed_at=clock_timestamp()
     WHERE status='running' AND attempt_count>=3 AND started_at<clock_timestamp()-interval '5 minutes'`);
   const result=await queuePool.query(`WITH candidates AS (
@@ -82,11 +98,33 @@ async function importLoop(){
   }
 }
 const importLoopPromise=importLoop();
-console.log('Worker listening: catalog-check and import commits. Business reads reauthorize tenant and shop.');
+
+async function processOutbox(consumerName:string,delivery:OutboxDelivery){
+  try{await consumeInternalOutboxDelivery(queuePool,delivery,consumerName,workerName);}
+  catch(error){
+    try{await failOutboxDelivery(queuePool,delivery,consumerName,workerName,error instanceof Error&&error.message==='OUTBOX_CONSUMER_NOT_REGISTERED'?'CONSUMER_NOT_REGISTERED':'CONSUMER_FAILED');}
+    catch{console.error(`Outbox delivery ${delivery.eventId} lost its lease or could not be rescheduled.`);}
+  }
+}
+async function outboxLoop(){
+  while(!stopping){
+    try{
+      const consumers=await activeOutboxConsumers(queuePool);let claimed=0;
+      for(const consumer of consumers){const deliveries=await claimOutboxDeliveries(queuePool,consumer,workerName);claimed+=deliveries.length;await Promise.all(deliveries.map(delivery=>processOutbox(consumer,delivery)));}
+      if(!claimed)await new Promise(resolve=>setTimeout(resolve,1000));
+    }catch{console.error('Outbox poll failed; retrying.');await new Promise(resolve=>setTimeout(resolve,3000));}
+  }
+}
+const outboxLoopPromise=outboxLoop();
+console.log('Worker listening: catalog-check, import commits and internal integration outbox.');
 
 async function stop(){
   if(stopping)return;stopping=true;
-  await importLoopPromise;await boss.stop();await queuePool.end();await closePools();
+  clearInterval(heartbeatTimer);
+  if(heartbeatInFlight)await heartbeatInFlight;
+  await Promise.all([importLoopPromise,outboxLoopPromise]);await boss.stop();await queuePool.end();
+  try{await stopServiceHeartbeat('worker',workerName);}catch{console.error('Could not mark worker heartbeat stopped.');}
+  await closePools();
 }
 process.on('SIGINT',()=>void stop());
 process.on('SIGTERM',()=>void stop());

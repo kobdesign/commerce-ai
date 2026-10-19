@@ -11,14 +11,15 @@ test('owner can browse, search, add a non-clothing product, and inspect tool evi
  await expect(page.getByRole('heading',{name:'สินค้า',exact:true})).toBeVisible();
  await page.getByLabel('ค้นหาสินค้า').fill('CH-L-BK-32');await expect(page.getByText('CH-L-BK-32',{exact:true})).toBeVisible();await expect(page.getByText('CH-S-IV-L',{exact:true})).toHaveCount(0);
  await page.getByLabel('ค้นหาสินค้า').fill('');await page.getByRole('link',{name:'เพิ่มสินค้า',exact:true}).click();
- const sku='E2E-'+Date.now();await page.getByLabel('ชื่อสินค้า',{exact:true}).fill('สมุดทดสอบ');await page.getByLabel('รหัส SKU',{exact:true}).fill(sku);await page.getByLabel('หมวดสินค้า',{exact:true}).fill('เครื่องเขียน');await page.getByLabel('ราคาขาย (บาท)',{exact:true}).fill('125.50');await page.getByRole('button',{name:'บันทึกสินค้า',exact:true}).click();
+ const sku='E2E-'+Date.now();await page.getByLabel('ชื่อสินค้า',{exact:true}).fill('สมุดทดสอบ');await page.getByLabel('รหัสสินค้า (SKU)',{exact:true}).fill(sku);await page.getByLabel('หมวดสินค้า',{exact:true}).fill('เครื่องเขียน');await page.getByLabel('ราคาขาย (บาท)',{exact:true}).fill('125.50');await page.getByRole('button',{name:'บันทึกสินค้า',exact:true}).click();
  await expect(page.getByText(sku,{exact:true})).toBeVisible();
  await page.getByRole('link',{name:'วิเคราะห์ข้อมูล',exact:true}).click();await page.getByRole('button',{name:'ตรวจรายการสินค้า'}).click();
  await expect(page.getByRole('status')).toContainText('ไม่ได้เรียกโมเดล');await expect(page.getByRole('status')).not.toContainText('CUP-01');
 });
-test('forged tenant API access and cross-origin mutations are denied',async({page})=>{
+test('allows the local preview origin while denying forged tenant and external-origin requests',async({page})=>{
  await signIn(page);
  const denied=await page.request.get(`/api/tenants/${demo.tenants.goods}/catalog?shopId=${demo.shops.goods}`);expect(denied.status()).toBe(403);expect(await denied.text()).not.toContain('Everyday');
+ const localPreview=await page.request.post(`/api/tenants/${demo.tenants.chino}/shops`,{headers:{Origin:'http://localhost:58498'},data:{name:`Local preview ${Date.now()}`,channel:'direct'}});expect(localPreview.status()).toBe(200);
  const csrf=await page.request.post(`/api/tenants/${demo.tenants.chino}/shops`,{headers:{Origin:'https://attacker.example'},data:{name:'forbidden',channel:'direct'}});expect(csrf.status()).toBe(403);
 });
 test('marketing sees catalog without costs and cannot create products',async({page})=>{
@@ -43,20 +44,21 @@ test('creates a product with dynamic details and six real SKU variants',async({p
  await page.getByRole('link',{name:'เพิ่มสินค้า',exact:true}).click();
  await page.getByLabel('ชื่อสินค้า',{exact:true}).fill('เสื้อหลายตัวเลือก '+Date.now());
  await page.getByLabel('หมวดสินค้า',{exact:true}).fill('เสื้อผ้า');
+ await page.getByText('รายละเอียดเพิ่มเติม (ไม่บังคับ)',{exact:false}).click();
  for(const [i,name] of ['วัสดุ','ประเทศ','การดูแล'].entries()){
    await page.getByRole('button',{name:'เพิ่มรายละเอียด',exact:true}).click();
    await page.getByLabel(`ชื่อรายละเอียด ${i+1}`,{exact:true}).fill(name);
    await page.getByLabel(`ค่ารายละเอียด ${i+1}`,{exact:true}).fill(['คอตตอน','ไทย','ซักมือ'][i]);
  }
  await page.getByRole('button',{name:'เพิ่มรายละเอียด',exact:true}).click();await page.getByRole('button',{name:'ลบรายละเอียด 4',exact:true}).click();
- await page.getByLabel('รหัส SKU',{exact:true}).fill('MATRIX-'+Date.now());
+ await page.getByLabel('รหัสสินค้า (SKU)',{exact:true}).fill('MATRIX-'+Date.now());
  await page.getByLabel('ราคาขาย (บาท)',{exact:true}).fill('499.50');
  await page.getByLabel('ต้นทุนต่อหน่วย (บาท)',{exact:true}).fill('200');
  await page.getByLabel('สินค้ามีหลายตัวเลือก',{exact:true}).check();
  await page.getByLabel('ชื่อตัวเลือก 1',{exact:true}).fill('สี');await page.getByLabel('ค่าตัวเลือก 1',{exact:true}).fill('ขาว, ดำ');
  await page.getByRole('button',{name:'เพิ่มประเภทตัวเลือก',exact:true}).click();
  await page.getByLabel('ชื่อตัวเลือก 2',{exact:true}).fill('ไซซ์');await page.getByLabel('ค่าตัวเลือก 2',{exact:true}).fill('S, M, L');
- await page.getByRole('button',{name:'สร้างรายการ SKU',exact:true}).click();
+ await page.getByRole('button',{name:'สร้างรายการตัวเลือก',exact:true}).click();
  await expect(page.getByLabel('SKU รายการ 6',{exact:true})).toBeVisible();
  await page.getByLabel('ราคาขายรายการ 6',{exact:true}).fill('550');
  await page.getByRole('button',{name:'บันทึกสินค้า',exact:true}).click();
@@ -90,7 +92,7 @@ for(const width of [1280,390])test(`size chips support keyboard, duplicates, rem
  await page.getByRole('link',{name:'เพิ่มสินค้า',exact:true}).click();
  await page.getByLabel('ชื่อสินค้า',{exact:true}).fill('เสื้อทดสอบป้ายขนาด '+Date.now());
  await page.getByLabel('หมวดสินค้า',{exact:true}).fill('เสื้อผ้า');
- await page.getByLabel('รหัส SKU',{exact:true}).fill('CHIPS-'+Date.now());
+ await page.getByLabel('รหัสสินค้า (SKU)',{exact:true}).fill('CHIPS-'+Date.now());
  await page.getByLabel('ราคาขาย (บาท)',{exact:true}).fill('399');
  await page.getByLabel('สินค้ามีหลายตัวเลือก',{exact:true}).check();
  await page.getByLabel('ชื่อตัวเลือก 1',{exact:true}).fill('ขนาด');
@@ -99,13 +101,13 @@ for(const width of [1280,390])test(`size chips support keyboard, duplicates, rem
  await entry.fill('M');await page.getByRole('button',{name:'เพิ่มค่าในตัวเลือก 1',exact:true}).click();
  await page.getByRole('button',{name:'เพิ่ม S, M, L, XL',exact:true}).click();await expect(chips.getByRole('listitem')).toHaveCount(4);
  await entry.fill(' s ');await entry.press('Enter');await expect(chips.getByRole('listitem')).toHaveCount(4);await expect(page.locator('.option-message')).toContainText('ไม่เพิ่มซ้ำ');
- await page.getByRole('button',{name:'สร้างรายการ SKU',exact:true}).click();
+ await page.getByRole('button',{name:'สร้างรายการตัวเลือก',exact:true}).click();
  const originalCode=await page.getByLabel('SKU รายการ 3',{exact:true}).inputValue();
  await page.getByLabel('ราคาขายรายการ 3',{exact:true}).fill('550');
  await page.getByRole('button',{name:'ลบค่า S ในตัวเลือก 1',exact:true}).click();
  await entry.fill('XXL');
  await page.getByRole('button',{name:'บันทึกสินค้า',exact:true}).click();await expect(page.locator('.editor-form').getByRole('alert')).toContainText('หลังแก้ตัวเลือก');
- await page.getByRole('button',{name:'อัปเดตรายการ SKU',exact:true}).click();
+ await page.getByRole('button',{name:'อัปเดตรายการตัวเลือก',exact:true}).click();
  await expect(chips.getByRole('listitem')).toHaveCount(4);await expect(entry).toHaveValue('');
  await expect(page.getByLabel('SKU รายการ 2',{exact:true})).toHaveValue(originalCode);
  await expect(page.getByLabel('ราคาขายรายการ 2',{exact:true})).toHaveValue('550');
