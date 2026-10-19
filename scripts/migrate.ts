@@ -9,10 +9,21 @@ try {
   for (const [name,key] of [['commerce_app','DATABASE_URL'],['commerce_identity','IDENTITY_DATABASE_URL'],['commerce_queue','QUEUE_DATABASE_URL']] as const) {
     const url = new URL(process.env[key] ?? '');
     const password = decodeURIComponent(url.password).replaceAll("'", "''");
-    if (!(await client.query('SELECT 1 FROM pg_roles WHERE rolname=$1',[name])).rowCount) {
-      await client.query(`CREATE ROLE ${name} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD '${password}'`);
+    const existingRole = await client.query(
+      'SELECT rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls FROM pg_roles WHERE rolname=$1',
+      [name],
+    );
+    if (!existingRole.rowCount) {
+      // PostgreSQL defaults every elevated attribute above to false. Avoid
+      // naming superuser-only attributes because managed database owners are
+      // intentionally not allowed to alter them, even when setting false.
+      await client.query(`CREATE ROLE ${name} LOGIN PASSWORD '${password}'`);
     } else {
-      await client.query(`ALTER ROLE ${name} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD '${password}'`);
+      const role = existingRole.rows[0];
+      if (role.rolsuper || role.rolcreatedb || role.rolcreaterole || role.rolreplication || role.rolbypassrls) {
+        throw new Error(`Runtime database role ${name} has elevated privileges.`);
+      }
+      await client.query(`ALTER ROLE ${name} WITH LOGIN PASSWORD '${password}'`);
     }
     // PostgreSQL 17 gives a non-superuser CREATEROLE account ADMIN membership
     // with SET FALSE. Render's database owner therefore cannot create a schema
