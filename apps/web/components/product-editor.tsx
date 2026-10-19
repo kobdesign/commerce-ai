@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft,Plus,Trash2 } from 'lucide-react';
 import { attributeMap,buildCombinations,normalizeLabel,productFamilyInput,salesUnits,variantKey } from '@commerce/contracts';
 import { request,toMinor } from '../lib/client';
+import { EditableCombobox } from './editable-combobox';
 import { mergeOptionValues,OptionValues } from './option-values';
 
 type Detail={id:number;name:string;value:string};
@@ -65,8 +66,7 @@ export function ProductEditor({tenantId,shopId,shopName,categories}:{tenantId:st
       <fieldset disabled={busy} className="editor-fieldset">
         <section className="editor-section"><div className="section-caption"><h2><span className="product-step">1</span> สินค้าอะไร?</h2><p>ใช้ข้อมูลนี้ร่วมกันทุกสีและขนาด</p></div><div className="section-fields field-grid">
           <label className="full-width">ชื่อสินค้า <input value={name} onChange={e=>setName(e.target.value)} required maxLength={150} placeholder="เช่น กางเกงชิโนขายาว รุ่น Everyday"/></label>
-          <label>หมวดสินค้า<input value={category} onChange={e=>setCategory(e.target.value)} list="product-categories" required maxLength={80} placeholder="เลือกหรือพิมพ์หมวดใหม่"/></label>
-          <datalist id="product-categories">{Array.from(new Set([...categories,'เสื้อผ้า','ของใช้ในบ้าน','สกินแคร์','เครื่องเขียน'])).map(c=><option key={c}>{c}</option>)}</datalist>
+          <EditableCombobox id="product-category" label="หมวดสินค้า" value={category} onChange={setCategory} options={[...categories,'เสื้อผ้า','ของใช้ในบ้าน','สกินแคร์','เครื่องเขียน']} required maxLength={80} placeholder="เลือกหรือพิมพ์หมวดใหม่"/>
           <label>หน่วยขาย<select value={unit} onChange={e=>setUnit(e.target.value)}>{salesUnits.map(u=><option key={u}>{u}</option>)}</select></label>
         </div></section>
         <section className="editor-section"><div className="section-caption"><h2><span className="product-step">2</span> ราคาและรหัสสินค้า</h2><p>รหัสสินค้า หรือ SKU ใช้แยกสินค้าแต่ละแบบเพื่อจับคู่ยอดขายและสต็อก</p></div><div className="section-fields field-grid">
