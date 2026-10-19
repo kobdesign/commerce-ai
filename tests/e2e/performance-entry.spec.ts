@@ -43,3 +43,14 @@ test('withholds the remaining-money answer when any imported cost is unknown',as
   await expect(page.getByText('ยังคำนวณเงินเหลือรวมไม่ได้',{exact:true})).toBeVisible();await expect(page.getByText('ระบบไม่แทนต้นทุนที่ขาดด้วยศูนย์',{exact:false})).toBeVisible();
   await expect(page.getByText('฿0.00',{exact:true})).toHaveCount(0);
 });
+
+test('keeps the empty-state import action readable and consistent',async({page})=>{
+  const ctx=await resolveContext(demo.users.owner,demo.tenants.chino);
+  const shopId=await createShop(ctx,{name:`UX empty ${Date.now()}`,channel:'direct'});
+  await withTenant(ctx,tx=>tx.query('INSERT INTO app.shop_products(tenant_id,shop_id,product_id) VALUES($1,$2,$3)',[ctx.tenantId,shopId,demo.products.pants]));
+  await signInAndSelect(page,shopId);
+  const action=page.getByRole('link',{name:'เริ่มนำเข้ารายงาน',exact:true});
+  await expect(action).toHaveCSS('display','inline-flex');
+  await expect(action).toHaveCSS('background-color','rgb(48, 79, 112)');
+  await expect(action).toHaveCSS('color','rgb(255, 255, 255)');
+});
