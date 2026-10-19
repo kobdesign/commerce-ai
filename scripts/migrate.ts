@@ -14,6 +14,11 @@ try {
     } else {
       await client.query(`ALTER ROLE ${name} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD '${password}'`);
     }
+    // PostgreSQL 17 gives a non-superuser CREATEROLE account ADMIN membership
+    // with SET FALSE. Render's database owner therefore cannot create a schema
+    // owned by the runtime role until it explicitly enables SET on that role.
+    // The admin credential is removed before the web or worker process starts.
+    await client.query(`GRANT ${name} TO CURRENT_USER WITH SET TRUE`);
   }
   await client.query('CREATE TABLE IF NOT EXISTS public.schema_migrations(name text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz DEFAULT now())');
   for(const name of (await readdir(new URL('../packages/db/migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort()) {
