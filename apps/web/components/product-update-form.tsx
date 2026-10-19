@@ -5,6 +5,7 @@ import { ArrowLeft,Plus,Trash2 } from 'lucide-react';
 import { normalizeLabel,productUpdateInput,salesUnits } from '@commerce/contracts';
 import type { ProductForEdit } from '@commerce/domain';
 import { money,request,RequestError,toMinor } from '../lib/client';
+import { ComboboxField } from './editable-combobox';
 
 export function ProductUpdateForm({product,tenantId,shopId,shopName}:{product:ProductForEdit;tenantId:string;shopId:string;shopName:string}){
   const router=useRouter(),sequence=useRef(Object.keys(product.attributes).length),errorRef=useRef<HTMLDivElement>(null);
@@ -38,8 +39,8 @@ export function ProductUpdateForm({product,tenantId,shopId,shopName}:{product:Pr
       <fieldset className="editor-fieldset" disabled={busy}>
         <section className="editor-section"><div className="section-caption"><h2>ข้อมูลสินค้า</h2><p>รายละเอียดที่ใช้ร่วมกันทุกตัวเลือก</p></div><div className="section-fields field-grid">
           <label className="full-width">ชื่อสินค้า<input required maxLength={150} value={name} onChange={e=>setName(e.target.value)}/></label>
-          <label>หมวดสินค้า<input required maxLength={80} value={category} onChange={e=>setCategory(e.target.value)}/></label>
-          <label>หน่วยขาย<select value={unit} onChange={e=>setUnit(e.target.value)}>{salesUnits.map(u=><option key={u}>{u}</option>)}</select></label>
+          <ComboboxField id="edit-product-category" label="หมวดสินค้า" value={category} onChange={value=>{setCategory(value);setDirty(true);}} options={[product.category,'เสื้อผ้า','ของใช้ในบ้าน','สกินแคร์','เครื่องเขียน']} required maxLength={80} placeholder="เลือกหรือพิมพ์หมวดใหม่" emptyMessage="ไม่พบหมวดเดิม ใช้ข้อความนี้เป็นหมวดใหม่ได้" helperText="เลือกจากรายการหรือพิมพ์หมวดใหม่"/>
+          <ComboboxField id="edit-product-sales-unit" label="หน่วยขาย" value={unit} onChange={value=>{setUnit(value);setDirty(true);}} options={[...salesUnits]} allowCustomValue={false}/>
         </div></section>
         <section className="editor-section"><div className="section-caption"><h2>รายละเอียดเพิ่มเติม</h2><p>เช่น วัสดุ ความจุ หรือวิธีดูแล</p></div><div className="section-fields">
           {details.map((d,i)=><div className="detail-row" key={d.id}>

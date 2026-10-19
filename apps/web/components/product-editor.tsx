@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft,Plus,Trash2 } from 'lucide-react';
 import { attributeMap,buildCombinations,normalizeLabel,productFamilyInput,salesUnits,variantKey } from '@commerce/contracts';
 import { request,toMinor } from '../lib/client';
-import { EditableCombobox } from './editable-combobox';
+import { ComboboxField } from './editable-combobox';
 import { mergeOptionValues,OptionValues } from './option-values';
 
 type Detail={id:number;name:string;value:string};
@@ -66,8 +66,8 @@ export function ProductEditor({tenantId,shopId,shopName,categories}:{tenantId:st
       <fieldset disabled={busy} className="editor-fieldset">
         <section className="editor-section"><div className="section-caption"><h2><span className="product-step">1</span> สินค้าอะไร?</h2><p>ใช้ข้อมูลนี้ร่วมกันทุกสีและขนาด</p></div><div className="section-fields field-grid">
           <label className="full-width">ชื่อสินค้า <input value={name} onChange={e=>setName(e.target.value)} required maxLength={150} placeholder="เช่น กางเกงชิโนขายาว รุ่น Everyday"/></label>
-          <EditableCombobox id="product-category" label="หมวดสินค้า" value={category} onChange={setCategory} options={[...categories,'เสื้อผ้า','ของใช้ในบ้าน','สกินแคร์','เครื่องเขียน']} required maxLength={80} placeholder="เลือกหรือพิมพ์หมวดใหม่"/>
-          <label>หน่วยขาย<select value={unit} onChange={e=>setUnit(e.target.value)}>{salesUnits.map(u=><option key={u}>{u}</option>)}</select></label>
+          <ComboboxField id="product-category" label="หมวดสินค้า" value={category} onChange={value=>{setCategory(value);setDirty(true);}} options={[...categories,'เสื้อผ้า','ของใช้ในบ้าน','สกินแคร์','เครื่องเขียน']} required maxLength={80} placeholder="เลือกหรือพิมพ์หมวดใหม่" emptyMessage="ไม่พบหมวดเดิม ใช้ข้อความนี้เป็นหมวดใหม่ได้" helperText="เลือกจากรายการหรือพิมพ์หมวดใหม่"/>
+          <ComboboxField id="product-sales-unit" label="หน่วยขาย" value={unit} onChange={value=>{setUnit(value);setDirty(true);}} options={[...salesUnits]} allowCustomValue={false}/>
         </div></section>
         <section className="editor-section"><div className="section-caption"><h2><span className="product-step">2</span> ราคาและรหัสสินค้า</h2><p>รหัสสินค้า หรือ SKU ใช้แยกสินค้าแต่ละแบบเพื่อจับคู่ยอดขายและสต็อก</p></div><div className="section-fields field-grid">
           <label className="full-width">{multiple?'รหัสตั้งต้นสำหรับตัวเลือก (SKU)':'รหัสสินค้า (SKU)'}<input aria-label={multiple?'รหัสตั้งต้นสำหรับตัวเลือก (SKU)':'รหัสสินค้า (SKU)'} value={sku} onChange={e=>setSku(e.target.value)} required maxLength={multiple?55:64} placeholder="เช่น CHINO-01"/><span className="field-help">{multiple?'ใช้ตั้งรหัสเริ่มต้น เช่น CHINO-01-01 แก้รหัสแต่ละรายการได้ด้านล่าง':'ใช้รหัสที่ตรงกับรายการขายของร้าน รหัสต้องไม่ซ้ำในบริษัท'}</span></label>
