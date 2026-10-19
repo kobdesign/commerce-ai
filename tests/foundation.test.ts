@@ -14,6 +14,11 @@ describe('Real PostgreSQL isolation and permissions',()=>{
   expect(r.rows[0]).toEqual({rolname:'commerce_app',rolsuper:false,rolbypassrls:false});
   const owned=await pool().query("SELECT 1 FROM pg_tables WHERE schemaname='app' AND tableowner=current_user");expect(owned.rowCount).toBe(0);
  });
+ it('keeps RLS enabled while allowing only the startup database owner to bypass it',async()=>{
+  const tables=await admin.query("SELECT c.relrowsecurity AS enabled,c.relforcerowsecurity AS forced FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='app' AND c.relkind='r' AND c.relrowsecurity");
+  expect(tables.rowCount).toBeGreaterThan(0);
+  expect(tables.rows.every(table=>table.enabled===true&&table.forced===false)).toBe(true);
+ });
  it('denies all scoped data without an actor/tenant',async()=>{expect((await pool().query('SELECT * FROM app.products')).rows).toEqual([]);});
  it('returns only granted tenants and denies forged tenant IDs',async()=>{
   await expect(resolveContext(demo.users.owner,demo.tenants.goods)).rejects.toMatchObject({status:403});
