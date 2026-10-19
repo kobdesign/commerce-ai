@@ -9,13 +9,13 @@ async function signIn(page:Page,email='owner@chino.demo'){
  await page.getByRole('button',{name:'เข้าสู่พื้นที่ทำงาน'}).click();
  await expect(page.getByRole('heading',{name:'ภาพรวม',exact:true})).toBeVisible();
 }
-const allRoutes=['/','/catalog','/orders','/imports','/performance','/ai','/settlements','/financial-events','/expenses','/reviews','/team','/activity','/integrations/inbox','/team/service-access','/support/poc'];
+const allRoutes=['/','/catalog','/inventory','/orders','/imports','/performance','/ai','/settlements','/financial-events','/expenses','/reviews','/team','/activity','/integrations/inbox','/team/service-access','/support/poc'];
 
 test('owner starts from familiar tasks and can still find every existing workspace tool',async({page})=>{
  await signIn(page);
  const nav=page.getByRole('navigation',{name:'เมนูร้านค้า'});
  expect(await nav.locator('a:not(.nav-help)').evaluateAll(links=>links.map(link=>link.getAttribute('href')))).toEqual(allRoutes);
- await expect(nav.getByRole('link')).toHaveCount(7); // Six everyday links and the help link; details start collapsed.
+ await expect(nav.getByRole('link')).toHaveCount(8); // Seven everyday links and the help link; details start collapsed.
  const guide=page.locator('#start-guide');
  await guide.locator('summary').click();await expect(guide).toHaveAttribute('open','');
  await expect(guide.getByRole('listitem')).toHaveCount(3);
