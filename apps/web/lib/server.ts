@@ -3,10 +3,10 @@ import { redirect } from 'next/navigation';
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { sessionUser,organizations,shops } from '@commerce/domain';
-import { resolveContext } from '@commerce/db';
+import { assertOperationalControl,resolveContext } from '@commerce/db';
 import { AppError,uuid } from '@commerce/contracts';
 import { cache } from 'react';
-import { applicationOrigin } from './environment';
+import { mutationOriginAllowed } from './environment';
 export async function user(){return sessionUser((await cookies()).get('commerce_session')?.value);}
 export async function requireUser(){const u=await user();if(!u)throw new AppError(401,'UNAUTHENTICATED','กรุณาเข้าสู่ระบบ');return u;}
 export async function apiContext(tenantId:string){uuid.parse(tenantId);const u=await requireUser();return resolveContext(u.id,tenantId);}
@@ -20,8 +20,7 @@ export const workspace=cache(async function workspace(){
   return {user:u,org,orgs,ctx,shops:allowedShops,shop};
 });
 export function checkOrigin(req:Request){
-  const configured=applicationOrigin();
-  if(!configured||req.headers.get('origin')!==configured)throw new AppError(403,'ORIGIN_REJECTED','คำขอนี้ไม่ได้มาจากแอปที่อนุญาต');
+  if(!mutationOriginAllowed(req.headers.get('origin')))throw new AppError(403,'ORIGIN_REJECTED','คำขอนี้ไม่ได้มาจากแอปที่อนุญาต');
 }
 export async function jsonInput(req:Request,maxBytes=32768){
   checkOrigin(req);
@@ -31,6 +30,11 @@ export async function jsonInput(req:Request,maxBytes=32768){
   try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>maxBytes){await reader.cancel();throw new AppError(413,'TOO_LARGE','ข้อมูลมีขนาดใหญ่เกินกำหนด');}chunks.push(value);}}finally{reader.releaseLock();}
   const text=Buffer.concat(chunks).toString('utf8');
   try{return JSON.parse(text) as unknown;}catch{throw new AppError(400,'INVALID_JSON','รูปแบบข้อมูลไม่ถูกต้อง');}
+}
+export async function mutationInput(req:Request,maxBytes=32768){
+  const input=await jsonInput(req,maxBytes);
+  await assertOperationalControl('web_mutations');
+  return input;
 }
 export async function respond(fn:()=>Promise<unknown>){
   try{return NextResponse.json(await fn(),{headers:{'Cache-Control':'private, no-store'}});}

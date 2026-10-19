@@ -1,0 +1,3 @@
+Statement ID,Order/adjustment ID,Settlement date,Total settlement amount,Transaction ID,Settlement amount,Type
+TT-STMT-20260917-01,TT-ORDER-10001,2026-09-17,538.00,TT-TXN-10001,319.00,Order settlement
+TT-STMT-20260917-01,TT-ORDER-10002,2026-09-17,538.00,TT-TXN-10002,219.00,Order settlement

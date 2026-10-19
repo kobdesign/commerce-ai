@@ -1,0 +1,19 @@
+{
+  "status": "passed",
+  "runId": "5c10beb3-276b-4a03-949c-9b8f50311b41",
+  "startedAt": "2026-09-27T16:48:25.672Z",
+  "completedAt": "2026-09-27T16:48:25.710Z",
+  "scope": "local rehearsal only",
+  "checks": {
+    "startedEnabled": true,
+    "controlsDisabled": true,
+    "mutationGateBlocked": true,
+    "readPathAvailable": true,
+    "auditEvents": true,
+    "controlsRestored": true
+  },
+  "staging": {
+    "status": "not-run",
+    "reason": "MONITOR_BASE_URL, alert destination and approved incident owner are not configured in this workspace"
+  }
+}

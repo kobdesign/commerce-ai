@@ -1,0 +1,41 @@
+import Link from 'next/link';
+import { ArrowLeft,Boxes,ChevronLeft,ChevronRight,CircleAlert,PackageCheck,Search,Settings2,ShieldCheck,Store,Warehouse } from 'lucide-react';
+import type { CentralInventoryChannel,CentralInventoryOverview,CentralInventoryStatus } from '@commerce/domain';
+import { openInventoryFromCentral } from '../app/actions';
+
+const number=(value:number)=>new Intl.NumberFormat('th-TH').format(value);
+const date=(value:string)=>new Intl.DateTimeFormat('th-TH',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Bangkok'}).format(new Date(value));
+const statuses:{value:CentralInventoryStatus;label:string}[]=[
+ {value:'all',label:'ทั้งหมด'},{value:'available',label:'มีพร้อมจัดสรร'},{value:'out',label:'ไม่มีให้จัดสรร'},{value:'reserved',label:'มีรายการจอง'},{value:'archived',label:'หยุดขาย'},
+];
+
+function href(search:string,status:CentralInventoryStatus,page=1){
+ const params=new URLSearchParams();if(search)params.set('search',search);if(status!=='all')params.set('status',status);if(page>1)params.set('page',String(page));
+ const query=params.toString();return query?`/inventory?${query}`:'/inventory';
+}
+function options(attributes:Record<string,string>){return Object.entries(attributes).map(([key,value])=>`${key}: ${value}`).join(' / ')||'ไม่มีตัวเลือก';}
+function channelName(channel:string){return ({tiktok:'TikTok Shop',shopee:'Shopee',lazada:'Lazada',direct:'ขายตรง'} as Record<string,string>)[channel]??channel;}
+const policyNames={shared:'กองกลางร่วม',fixed:'โควตาคงที่',hybrid:'Hybrid'} as const;
+function ChannelPlacement({placement,mode}:{placement:CentralInventoryChannel;mode:CentralInventoryOverview['rows'][number]['distributionMode']}){return <div className="central-stock-channel"><div><Store size={14}/><strong>{channelName(placement.channel)}</strong><span>{placement.shopName}</span></div><small className={placement.mapped?'is-mapped':'is-unmapped'}>{placement.mapped?'เชื่อมรหัสสินค้าแล้ว':'ยังไม่เชื่อมรหัสสินค้า'}</small><small>{mode==='shared'?'ใช้กองกลางร่วม':placement.configuredQuantity===null?'ยังไม่กำหนดจำนวน':`${mode==='fixed'?'โควตา':'เพดาน'} ${number(placement.configuredQuantity)}`}</small><small>ยอดบนช่องทาง: ยังไม่เชื่อม</small></div>;}
+
+export function CentralInventoryView({tenantId,currentShopId,data}:{tenantId:string;currentShopId?:string;data:CentralInventoryOverview}){
+ const {summary,query}=data,totalPages=Math.max(1,Math.ceil(query.totalRows/query.pageSize));
+ return <>
+  <div className="page-heading central-stock-heading"><div><span className="inventory-eyebrow">{data.location?.name??'คลังหลัก'} · ยอดร่วมทุกช่องทาง</span><h1>สต็อกกลาง</h1><p>ทุกช่องทางที่คุณมีสิทธิ์ดู · แสดง {number(query.totalRows)} SKU · ข้อมูล ณ {date(data.asOf)}</p></div><div className="central-stock-heading-actions"><Link className="button secondary" href="/inventory/settings"><Settings2 size={16}/>นโยบายสต็อก</Link><Link className="button secondary" href="/catalog"><ArrowLeft size={16}/>กลับไปสินค้า</Link></div></div>
+  <section className="inventory-boundary-note central-stock-boundary" aria-label="ขอบเขตสต็อกกลาง"><ShieldCheck size={20}/><div><strong>นี่คือยอดสินค้ากลางของบริษัท</strong><p>คงเหลือจริงและยอดจองใช้ร่วมกันทุกช่องทาง หน้านี้รวม SKU จาก TikTok Shop, Shopee, Lazada และร้านอื่นที่คุณมีสิทธิ์ดู โดยไม่ขึ้นกับร้านที่เลือกอยู่</p><p><b>ยอดบนช่องทางยังไม่ใช่ข้อมูลสด</b> จนกว่าจะเชื่อมระบบของแต่ละ marketplace จึงไม่แสดงตัวเลขประมาณหรือสร้างยอด 60/70 ขึ้นมาเอง</p></div></section>
+  <section className="central-stock-summary" aria-label="สรุปสต็อกกลาง">
+   <article><Boxes size={18}/><span>SKU ทั้งหมด</span><strong>{number(summary.skuCount)}</strong><small>{number(summary.productCount)} สินค้า</small></article>
+   <article><PackageCheck size={18}/><span>มีพร้อมจัดสรร</span><strong>{number(summary.availableCount)}</strong><small>หลังหักจองและ Safety stock</small></article>
+   <article className={summary.outCount?'needs-attention':''}><CircleAlert size={18}/><span>ไม่มีให้จัดสรร</span><strong>{number(summary.outCount)}</strong><small>หลังหักจองและ Safety stock</small></article>
+   <article><Warehouse size={18}/><span>มีรายการจอง</span><strong>{number(summary.reservedCount)}</strong><small>SKU ที่กันสินค้าไว้แล้ว</small></article>
+  </section>
+  <section className="panel central-stock-panel">
+   <div className="central-stock-toolbar">
+    <form action="/inventory" className="central-stock-search"><label htmlFor="stock-search">ค้นหาสินค้าหรือ SKU</label><div><Search size={17}/><input id="stock-search" name="search" maxLength={100} defaultValue={query.search} placeholder="เช่น กางเกงชิโน่ หรือ CH-L-BK"/>{query.status!=='all'?<input type="hidden" name="status" value={query.status}/>:null}<button className="button secondary" type="submit">ค้นหา</button></div></form>
+    <div className="central-stock-tabs" aria-label="กรองสถานะสต็อก">{statuses.map(item=><Link key={item.value} href={href(query.search,item.value)} aria-current={query.status===item.value?'page':undefined}>{item.label}</Link>)}</div>
+   </div>
+   {data.rows.length?<div className="central-stock-table-wrap"><table className="central-stock-table"><thead><tr><th>สินค้าและ SKU</th><th>ตัวเลือก</th><th>ช่องทางขาย</th><th className="numeric">คงเหลือจริง</th><th className="numeric">จองแล้ว</th><th className="numeric">กันสำรอง</th><th className="numeric">พร้อมจัดสรร</th><th>สถานะ</th><th><span className="sr-only">จัดการ</span></th></tr></thead><tbody>{data.rows.map(row=>{const target=row.channels.find(channel=>channel.shopId===currentShopId)??row.channels[0];return <tr key={row.variantId} className={row.archived?'is-archived':''}><td data-label="สินค้าและ SKU"><strong>{row.productName}</strong><code>{row.sku}</code><small>{row.category} · หน่วย {row.salesUnit}</small></td><td data-label="ตัวเลือก">{options(row.attributes)}</td><td data-label="ช่องทางขาย"><div className="central-stock-policy-summary"><strong>{policyNames[row.distributionMode]}</strong><small>{row.distributionSource==='sku'?'ตั้งค่าเฉพาะ SKU':'ใช้ค่าบริษัท'}</small></div><div className="central-stock-channels">{row.channels.map(channel=><ChannelPlacement key={channel.shopId} placement={channel} mode={row.distributionMode}/>)}</div></td><td data-label="คงเหลือจริง" className="numeric">{number(row.onHand)}</td><td data-label="จองแล้ว" className="numeric">{number(row.reserved)}</td><td data-label="กันสำรอง" className="numeric">{number(row.safetyStock)}</td><td data-label="พร้อมจัดสรร" className="numeric central-stock-available"><strong>{number(row.distributable)}</strong></td><td data-label="สถานะ"><span className={`catalog-status ${row.distributable>0?'active':'archived'}`}>{row.distributable>0?'พร้อมจัดสรร':'ไม่มีให้จัดสรร'}</span>{row.archived?<small className="central-stock-archived">หยุดขาย</small>:null}</td><td className="central-stock-action"><Link className="text-link" href={`/inventory/${row.variantId}/distribution`}>ตั้งค่าช่องทาง</Link>{target?<form action={openInventoryFromCentral}><input type="hidden" name="tenantId" value={tenantId}/><input type="hidden" name="shopId" value={target.shopId}/><input type="hidden" name="productId" value={row.productId}/><button className="text-link" type="submit">{data.canWrite?'ดูและปรับยอด':'ดูรายละเอียด'}</button></form>:<span className="muted">ไม่มีช่องทาง</span>}</td></tr>;})}</tbody></table></div>:<div className="central-stock-empty"><Warehouse size={28}/><h2>ไม่พบ SKU ตามเงื่อนไขนี้</h2><p>{query.search||query.status!=='all'?'ลองล้างคำค้นหรือเลือก “ทั้งหมด”':'เพิ่มสินค้าก่อน แล้วจึงตั้งยอดเริ่มต้นหรือรับสินค้าเข้า'}</p><Link className="button secondary" href={query.search||query.status!=='all'?'/inventory':'/catalog/new'}>{query.search||query.status!=='all'?'ล้างตัวกรอง':'เพิ่มสินค้า'}</Link></div>}
+   {query.totalRows>query.pageSize?<nav className="central-stock-pagination" aria-label="เปลี่ยนหน้าสต็อก"><span>หน้า {number(query.page)} จาก {number(totalPages)} · {number(query.totalRows)} SKU</span><div>{query.page>1?<Link className="button secondary" href={href(query.search,query.status,query.page-1)}><ChevronLeft size={16}/>ก่อนหน้า</Link>:null}{query.page<totalPages?<Link className="button secondary" href={href(query.search,query.status,query.page+1)}>ถัดไป<ChevronRight size={16}/></Link>:null}</div></nav>:null}
+  </section>
+ </>;
+}

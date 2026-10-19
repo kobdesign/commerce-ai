@@ -1,0 +1,3 @@
+payout_reference,settled_on,payout_total,source_line_id,order_id,allocation_amount,note
+PAYOUT-DEMO-001,2026-09-17,538.00,PAYOUT-DEMO-001-LINE-01,ORDER-DEMO-001,319.00,Statement ข้อมูลสมมติ
+PAYOUT-DEMO-001,2026-09-17,538.00,PAYOUT-DEMO-001-LINE-02,ORDER-DEMO-002,219.00,Statement ข้อมูลสมมติ

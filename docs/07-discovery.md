@@ -31,8 +31,8 @@
 | AI Native + Multi-Tenant + Enterprise path | ผู้ใช้ต้องการ | เป็นข้อกำหนดหลัก |
 | เริ่ม workflow import → metrics → AI evidence | baseline ที่เสนอและเริ่มวางแผนแล้ว | ตรวจข้อมูลจริงก่อน implementation adapter |
 | CSV/XLSX ก่อน API | ข้อเสนอ | ตรวจรูปแบบและสิทธิ์ export จริง |
-| TypeScript/Next.js stack | แนะนำในเอกสาร stack | ยังไม่มีการติดตั้งแอปหรือบริการจริง |
-| Hosting/budget/region | แนะนำ Render สำหรับ pilot; ยังไม่ provision | ตรวจข้อจำกัดและประเมินราคาก่อนใช้ข้อมูลจริง |
+| TypeScript/Next.js stack | ติดตั้งพร้อม PostgreSQL/worker แล้ว | ต่อจาก repo เดิม; ดู docs/08 และ docs/10–28 |
+| Hosting/budget/region | มีแผน/คู่มือ Render staging ตาม docs/21 | ยืนยันสถานะ environment งบ และ production readiness ณ วันปล่อยจริง |
 | Model/provider | ยังไม่เลือก production model | เลือกจาก eval ภาษาไทย/tool use/cost/data policy |
 | เวลาและทีม | ยังไม่ทราบ | ไม่กำหนด deadline จากสมมติฐาน |
 
@@ -41,3 +41,15 @@
 เดินงานจริงหนึ่งรอบ → ตรวจรายงานตัวอย่าง → ยืนยันหนึ่งออเดอร์และยอดหัก → ตรวจต้นทุน → เลือกคำถาม AI สามคำถามที่ต้องตอบให้ได้
 
 Output: source inventory, canonical mapping draft, approved calculation example และ acceptance criteria ที่อ้างอิงข้อมูลร้านจริง
+
+## ข้อมูลเพิ่มเติมสำหรับทิศทาง Agentic Commerce
+
+อัปเดต 17 กันยายน 2026 ตาม [decision register DEC-01–08](29-agentic-commerce-project-plan.md) รายการด้านล่างเป็นสิ่งที่ต้องเก็บก่อน gate ที่เกี่ยวข้อง ไม่ใช่สิ่งที่ผู้ใช้ต้องตอบครบก่อนเริ่ม FIN-AI-01 ด้วยข้อมูลสมมติ
+
+- เจ้าของร้าน/การเงิน: export ปกปิดข้อมูลจริงแยก platform/version, ตัวอย่าง adjustment/refund/หลายรอบโอน และยอดอ้างอิงสำหรับตรวจผล คงหัวคอลัมน์ ชีต ชนิดข้อมูล และ sign/date formats
+- ผู้ใช้ทำงานจริง: เวลาตรวจรายการ วิธีมอบหมาย/ปิดงาน นิยาม “ตรวจเสร็จ” และผู้มีสิทธิ์ยืนยัน; ไม่ใช้ task resolved แทนหลักฐานยอดตรง
+- Product/Engineering: กำลังทีม งบ hosting/model/support ขอบเขต pilot และข้อกำหนด identity/retention/restore
+- Operations ก่อน Stage C: SKU identity, แหล่งความจริงของ stock, opening quantities, timing ตอนจ่าย/แพ็ก/ส่ง/คืน, handling ของไม่พอ และวิธีคิดต้นทุนที่ต้องการ
+- Integration ก่อน C/D/E: ร้านและ API scopes ที่อนุญาต, data reuse/consent, provider capabilities, checkout destination และ payment/post-purchase responsibilities
+
+ใช้ร่วมกับ checklist discovery เดิมด้านบน โดยข้อมูลที่รอของ stage ถัดไปไม่เป็นตัวกั้นงาน synthetic ใน Stage B

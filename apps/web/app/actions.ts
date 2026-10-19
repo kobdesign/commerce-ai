@@ -2,8 +2,8 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { login,logout,organizations,shops,createOrganization } from '@commerce/domain';
-import { resolveContext } from '@commerce/db';
-import { AppError } from '@commerce/contracts';
+import { assertOperationalControl,resolveContext } from '@commerce/db';
+import { AppError,uuid } from '@commerce/contracts';
 import { requireUser } from '../lib/server';
 import { secureCookies } from '../lib/environment';
 const options={httpOnly:true,sameSite:'lax' as const,secure:secureCookies(),path:'/',maxAge:28800};
@@ -24,7 +24,14 @@ export async function switchShop(data:FormData){
   const ctx=await resolveContext(u.id,tenant);if(!(await shops(ctx)).some(s=>s.id===id))throw new AppError(403,'FORBIDDEN','ไม่มีสิทธิ์ร้านนี้');
   const jar=await cookies();jar.set('commerce_tenant',tenant,options);jar.set('commerce_shop',id,options);redirect('/catalog');
 }
+export async function openInventoryFromCentral(data:FormData){
+  const u=await requireUser(),tenant=uuid.parse(String(data.get('tenantId')??'')),shopId=uuid.parse(String(data.get('shopId')??'')),productId=uuid.parse(String(data.get('productId')??''));
+  const ctx=await resolveContext(u.id,tenant);
+  if(!(await shops(ctx)).some(shop=>shop.id===shopId))throw new AppError(403,'FORBIDDEN','ไม่มีสิทธิ์ร้านนี้');
+  const jar=await cookies();jar.set('commerce_tenant',tenant,options);jar.set('commerce_shop',shopId,options);redirect(`/catalog/${productId}/inventory`);
+}
 export async function newOrganization(data:FormData){
-  const u=await requireUser(),id=await createOrganization(u.id,data.get('name'));
+  const u=await requireUser();await assertOperationalControl('web_mutations');
+  const id=await createOrganization(u.id,data.get('name'));
   const jar=await cookies();jar.set('commerce_tenant',id,options);jar.delete('commerce_shop');redirect('/');
 }

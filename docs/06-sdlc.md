@@ -54,10 +54,29 @@ Discovery → Requirements/acceptance → Architecture/data contracts → Small 
 
 ## Incident และ learning
 
-กำหนดผู้รับผิดชอบ การหยุด workflow/AI การเพิกถอน credentials วิธีประเมินผลกระทบ tenant และช่องทางแจ้งลูกค้าก่อน production บันทึก root cause และเพิ่ม regression test หลัง incident
+กำหนดผู้รับผิดชอบ การหยุด workflow/AI การเพิกถอน credentials วิธีประเมินผลกระทบ tenant และช่องทางแจ้งลูกค้าก่อน production บันทึก root cause และเพิ่ม regression test หลัง incident ใช้ configuration gate และ operational controls ตาม [runbook v1.15](41-production-configuration-and-incident-gates.md); การเปิดกลับต้องมี actor/reason และ recovery evidence
 
 ผู้ดูแลตรวจ usage/error budget ตาม cadence ที่กำหนด ไม่ส่ง notification ที่ไม่ actionable ทุก run
 
 ## การเปลี่ยน scope
 
 คำขอใหม่ต้องระบุปัญหา ประโยชน์ ข้อมูลที่ต้องเพิ่ม ผลต่อ tenancy/AI/cost และ acceptance criteria ปรับ ADR/backlog ให้ตรง final scope ก่อนเริ่ม implementation ไม่เพิ่ม ERP/automation เพียงเพราะโครงสร้างรองรับได้
+
+### SC-2026-09-17-01 — Agentic Commerce direction
+
+ผู้ใช้ขอให้ปรับแผนตาม vision ที่วิเคราะห์จากเอกสารผู้บริหาร/ทีมเทคนิค โดยต่อยอดระบบเดิม การจัดทำแผนนี้อยู่ในขอบเขตที่ได้รับอนุญาต ไม่ต้องขออนุมัติเอกสารซ้ำเพื่อทำให้ข้อเสนอครบถ้วน
+
+| รายการ | ข้อสรุป |
+|---|---|
+| ปัญหา/คุณค่า | ร้านต้องตรวจเงินและติดตามงานได้เร็วขึ้น พร้อมเตรียมช่องทางขาย/automation ใหม่ |
+| ขอบเขตเพิ่ม | Stage A/B financial review assistant ก่อน C/D/E inventory/orders/published catalog/checkout |
+| ข้อมูลเพิ่ม | Provenance/basis ของยอด, evidence/run versions, task/draft/approval; stock/order/payment เพิ่มตาม stage |
+| Tenancy/AI | Effective grants ทุกเส้นทาง; AI ไม่อนุมัติตัวเอง; public catalog แยก finance; ไม่ใช้ข้อมูลข้ามองค์กร |
+| Cost/operations | วัดต่อ tenant/workflow; งบ/model/provider policy และทีมยังรอยืนยัน; ไม่เพิ่ม infra เพียงเพื่อรองรับภาพปลายทาง |
+| Acceptance | docs/30 FA-T01–10, docs/05 AG-T01–11 ตามความสามารถที่เปิด; golden/permission regression เดิมคงอยู่ |
+| Traceability | docs/29 = แผนหลัก, docs/04 = active backlog, docs/02–03 = requirements/ADR, docs/30 = slice ถัดไป |
+| Release boundary | เอกสารไม่เท่ากับ implementation, verified adapter, production readiness หรือ permission ให้ merge/deploy/ซื้อบริการ |
+
+แต่ละรอบเลือก workflow ที่ผู้ใช้ลองได้จริง พร้อม demo และหลักฐาน ไม่เริ่มทุก package พร้อมกัน ไม่ใช้ roadmap ไตรมาสเป็น deadline จนยืนยันทีม/งบ/dependencies
+
+การทดสอบด้วย synthetic/model mocks ทำก่อนเพื่อพัฒนาได้; production data/provider eval/UAT แยก gate ชัดเจน เรื่องที่รอข้อมูลไม่ควรหยุดงานอิสระที่ทำได้

@@ -1,5 +1,7 @@
 # Requirements และสิทธิ์
 
+อัปเดตทิศทางตาม [SC-2026-09-17-01](29-agentic-commerce-project-plan.md) Requirements เป็นเป้าหมายตรวจรับ ไม่ใช่รายการฟีเจอร์ที่ส่งมอบครบแล้ว ดูสถานะ implementation ในแผนและ docs/10–28
+
 ## Functional requirements
 
 | ID | Requirement | เกณฑ์ตรวจรับหลัก |
@@ -38,6 +40,31 @@ AI ต้องไม่เปิดเผยข้อมูลที่ห้�
 
 Platform support ไม่มีสิทธิ์อ่านข้อมูลลูกค้าโดยปริยาย การเข้าถึงช่วยเหลือต้องจำกัดเวลา ขอบเขต เหตุผล และมี audit
 
+### ส่วนเพิ่มสำหรับ slice ตรวจเงิน
+
+Owner/Finance ที่มี shop grant อ่าน financial tools, สร้างร่าง, ยืนยันสร้าง task และติดตาม/ปิดงานได้; Auditor อ่าน summary/task/evidence ได้แต่เขียนหรืออนุมัติไม่ได้; Marketing/Operator ไม่ได้รับ financial task/tools เพิ่ม สิทธิ์ของผู้รับงานต้องตรวจ ณ เวลามอบหมายและใช้งานทุกครั้ง
+
+Agent ไม่มีสิทธิ์เพิ่มจากบทบาทเดิมและอนุมัติข้อเสนอของตนเองไม่ได้ การส่ง `confirm: true` ไม่แทน approval record ฝั่ง server Manual UI ใช้ command/policy เดียวกับงานที่เริ่มจาก AI
+
+## Requirements ส่วนขยายตาม stage
+
+| ID | Stage / Requirement | เกณฑ์ตรวจรับหลัก |
+|---|---|---|
+| FR-15 | A/B: Source confidence | แยกยอดรายงานต้นทาง/รวมจากบรรทัด/unknown; ไม่อ้าง bank receipt หรือ independent verification จาก derived total |
+| FR-16 | B: Shared commands/tools | UI/AI ใช้ business functions เดียว; validate + server authorization; tools เปิดด้วย explicit allowlist |
+| FR-17 | B: Financial review tasks | Draft → confirm → task atomic/idempotent; แยกสถานะ task จาก reconciliation; assignment เคารพ shop grants |
+| FR-18 | B/E: Approval lifecycle | ผูก actor/payload/evidence/policy version/expiry; ตรวจสิทธิ์และข้อมูลล่าสุด; reject stale/replay; E เพิ่ม execution attempts/unknown outcomes |
+| FR-19 | C: SKU lifecycle & channel mapping | เพิ่ม variant/archive โดยคงประวัติและ canonical ID; ไม่ reuse SKU จนโยงธุรกรรมเก่าผิด; listing mapping ตรวจ identity จริง |
+| FR-20 | C: Inventory & reservation | Atomic reserve/commit/release/expiry; ledger ตรง on_hand; ออเดอร์จ่ายแล้วแต่ของไม่พออยู่ shortage ไม่สร้าง movement เท็จ |
+| FR-21 | C: Orders & reconciliation | Live orders แยกจาก historical sales/settlement; map external IDs พร้อม provenance; ambiguous รอคนตรวจ; partial return/refund ไม่ลงซ้ำ |
+| FR-22 | C: Reliable connectors | Seller authorization, signed webhook verification ตาม provider, inbox/outbox, dedup/retry/reconciliation; read-only/shadow ก่อน writes |
+| FR-23 | D: Published catalog & machine access | Merchant consent, published projection แยก finance, revoke/scope/tenant tests; freshness ชัดเจน; ไม่มี stock ไม่อ้าง availability |
+| FR-24 | E: Checkout & payment orchestration | แยก checkout/payment/order/fulfillment/return/refund; timeout/expiry/replay recovery; approval ไม่ใช่ execution success |
+| FR-25 | C–E: Channel attribution | เก็บ discovery source, checkout channel, protocol และ payment provider แยก; AI referral ไม่ทำให้เกิด order ซ้ำ |
+| FR-26 | Support: Consent-based Co-browsing | ลูกค้าเริ่ม/ยินยอม/หยุด session ได้; ค่าเริ่มต้น view-only และจำกัดหน้า; support ไม่มีสิทธิ์อ่าน tenant อื่นหรือข้อมูลปกปิด; code ใช้ครั้งเดียวและหมดอายุ |
+
+FR-15–18 ตรวจตาม [FA-T01–10](30-financial-review-assistant-slice.md); FR-19–26 มี boundary tests ใน [verification](05-verification.md) และต้องแตก acceptance fixtures ตาม workflow/provider ก่อนเริ่มงานแต่ละส่วน
+
 ## Non-functional requirements
 
 | ID | ข้อกำหนด | หลักฐานตรวจรับ |
@@ -52,11 +79,12 @@ Platform support ไม่มีสิทธิ์อ่านข้อมูล
 | NFR-08 | Data lifecycle | กำหนด retention/delete/export ครอบคลุม raw files, derived data, AI และ backup lifecycle |
 | NFR-09 | Security baseline | secrets แยก environment, encryption, admin MFA, dependency/secret scans |
 | NFR-10 | Performance | ตั้งเกณฑ์ด้วยจำนวนออเดอร์/ขนาดไฟล์ที่สำรวจจริง; ยังไม่กล่าวอ้าง throughput |
+| NFR-11 | Co-browsing privacy & containment | mask ที่ browser ก่อนส่ง, ไม่ส่ง cookies/tokens/hidden state, ผูก session กับ tenant/user/case/agent/origin, มี timeout/revocation/audit/kill switch และ masking regression ทุก release ที่เปิด feature |
 
 ## Enterprise roadmap
 
 รากฐาน MVP: tenant grants, audit, entitlement, usage, policy settings, export, routing abstraction และ approval data model
 
-เปิดก่อนรับลูกค้าที่ต้องใช้: SAML/OIDC SSO, SCIM, custom roles, multiple approval levels, SIEM export, dedicated resources, regional residency, customer-managed keys, ERP integration, SLA/DR ตามสัญญา
+เปิดก่อนรับลูกค้าที่ต้องใช้: SAML/OIDC SSO, SCIM, custom roles, multiple approval levels, SIEM export, dedicated resources, regional residency, customer-managed keys, ERP integration, Co-browsing residency/retention/support-access controls และ SLA/DR ตามสัญญา
 
 เอกสารนี้ไม่ใช่การรับรอง compliance หรือคำสัญญาว่าฟีเจอร์ roadmap เปิดใช้แล้ว

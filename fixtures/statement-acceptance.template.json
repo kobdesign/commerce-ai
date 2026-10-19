@@ -1,0 +1,28 @@
+{
+  "version": "settlement-sample-intake-v1",
+  "adapterKey": "tiktok-shop-th",
+  "schemaVersion": "tiktok-shop-th-statement-v1",
+  "sanitizedSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "source": {
+    "exportedAt": "2026-09-23T00:00:00.000Z",
+    "sellerCenterTimezone": "Asia/Bangkok",
+    "currency": "THB"
+  },
+  "expected": {
+    "rowCount": 1,
+    "payoutCount": 1,
+    "allocatedTotalMinor": 0,
+    "reportedPayoutTotalMinor": 0
+  },
+  "review": {
+    "reviewer": "กรอกชื่อผู้ตรวจ",
+    "reviewedAt": "2026-09-23T00:00:00.000Z",
+    "headersCorrect": false,
+    "datesCorrect": false,
+    "signsCorrect": false,
+    "identitySemanticsCorrect": false,
+    "totalsCorrect": false,
+    "notes": "กรอกผลการเทียบกับ Seller Center อย่างน้อย 3 ตัวอักษร"
+  },
+  "decision": "rejected"
+}

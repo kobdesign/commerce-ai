@@ -22,6 +22,8 @@ flowchart LR
 
 เว็บและ worker ใช้บัญชีฐานข้อมูลแยกตามหน้าที่ รหัสผ่านสร้างโดย Render และใช้ร่วมกันผ่าน environment group บัญชีผู้ดูแลฐานข้อมูลมีอยู่เฉพาะช่วง migration/seed จากนั้น startup process จะลบค่าออกก่อนเปิด runtime process
 
+`/api/health` เป็น health check ขั้นต่ำของ web/database สำหรับ routing ส่วน `/api/ready` เป็น operational readiness ที่เข้มกว่า โดยตรวจ configuration, application role, identity role, heartbeat ของ worker ภายใน 45 วินาที และ import queue lag ตอบ 503 เมื่อส่วนใดไม่พร้อม และไม่ส่งชื่อ instance, connection string, queue count หรือเวลาภายในออกมา Startup รัน `release:preflight` ก่อน migration/process และ operational controls ใช้หยุด writes/import claims ตาม [incident runbook](41-production-configuration-and-incident-gates.md) Monitor และ signed alert contract อยู่ใน [docs/42](42-runtime-monitoring-and-incident-rehearsal.md) แต่ยังไม่เพิ่ม paid monitor service จนกว่าจะอนุมัติ destination/owner/resource
+
 ## ขอบเขตของ staging นี้
 
 - ใช้ข้อมูลสมมติและ `APP_MODE=staging-demo`
@@ -54,6 +56,8 @@ Render จะรัน migration แบบ append-only ทุกครั้ง�
 - ยืนยันรูปแบบรายงาน TikTok จริงและสูตรเงินรับ/ต้นทุนกับผู้ดูแลการเงิน
 - เปลี่ยน demo identity เป็น production identity provider พร้อม MFA/SSO ตามระดับลูกค้า
 - เปิด AI ภายนอกหลังมี evaluation, budget, redaction และ monitoring แยก tenant
+
+Local rehearsal และเครื่องมือตรวจ restore อยู่ใน [docs/40](40-backup-restore-rehearsal.md) แต่ไม่แทนการซ้อมด้วย Render backup/restore จริง ก่อน staging รับข้อมูลที่อนุญาตต้องยืนยันว่า target cluster provision roles `commerce_app`, `commerce_identity`, `commerce_queue` แล้วและ restore ownership/ACL ครบ โดยเฉพาะ schema `jobs`
 
 ## Rollback
 

@@ -38,4 +38,32 @@ export async function withTenant<T>(ctx:Context,fn:(tx:Tx,role:Role)=>Promise<T>
     return fn(tx,role);
   });
 }
+export type ServiceHeartbeatStatus={available:boolean;lastSeenAt:Date|null};
+export async function touchServiceHeartbeat(service:'worker',instanceId:string){
+  await pool().query('SELECT app.touch_service_heartbeat($1,$2)',[service,instanceId]);
+}
+export async function stopServiceHeartbeat(service:'worker',instanceId:string){
+  await pool().query('SELECT app.stop_service_heartbeat($1,$2)',[service,instanceId]);
+}
+export async function serviceHeartbeatStatus(service:'worker'):Promise<ServiceHeartbeatStatus>{
+  const row=(await pool().query<{available:boolean;last_seen_at:Date|null}>('SELECT available,last_seen_at FROM app.service_heartbeat_status($1)',[service])).rows[0];
+  return {available:row?.available===true,lastSeenAt:row?.last_seen_at??null};
+}
+export async function importQueueReady(){
+  const row=(await pool().query<{ready:boolean}>('SELECT app.import_queue_ready() AS ready')).rows[0];
+  return row?.ready===true;
+}
+export async function outboxQueueReady(){
+  const row=(await pool().query<{ready:boolean}>('SELECT app.outbox_queue_ready() AS ready')).rows[0];
+  return row?.ready===true;
+}
+export const operationalControlNames=['web_mutations','import_commits'] as const;
+export type OperationalControlName=typeof operationalControlNames[number];
+export async function operationalControlEnabled(control:OperationalControlName){
+  const row=(await pool().query<{enabled:boolean}>('SELECT app.operational_control_enabled($1) AS enabled',[control])).rows[0];
+  return row?.enabled===true;
+}
+export async function assertOperationalControl(control:OperationalControlName){
+  if(!await operationalControlEnabled(control))throw new AppError(503,'OPERATION_PAUSED','ระบบหยุดรับการเปลี่ยนแปลงชั่วคราว กรุณาลองใหม่ภายหลัง');
+}
 export async function closePools(){await Promise.all([globalDb.commercePool?.end(),globalDb.identityPool?.end()]);delete globalDb.commercePool;delete globalDb.identityPool;}
