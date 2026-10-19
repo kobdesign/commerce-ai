@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { describe,expect,test } from 'vitest';
 import { deploymentConfiguration } from '@commerce/operations';
 
@@ -36,5 +37,12 @@ describe('deployment configuration gates',()=>{
     expect(blocked.checks.filter(item=>item.status==='blocked').map(item=>item.key)).toEqual(['monitor-target','alert-webhook','alert-secret']);
     const ready=deploymentConfiguration('monitor',{APP_MODE:'staging-demo',MONITOR_BASE_URL:'https://staging.example.test',MONITOR_ALERT_WEBHOOK_URL:'https://alerts.example.test/runtime',MONITOR_ALERT_WEBHOOK_SECRET:'x'.repeat(32)});
     expect(ready.status).toBe('ok');
+  });
+
+  test('lets a managed database owner assign runtime role ownership during migration',async()=>{
+    const source=await readFile(new URL('../scripts/migrate.ts',import.meta.url),'utf8');
+    const grant='GRANT ${name} TO CURRENT_USER WITH SET TRUE';
+    expect(source).toContain(grant);
+    expect(source.indexOf(grant)).toBeLessThan(source.indexOf('CREATE TABLE IF NOT EXISTS public.schema_migrations'));
   });
 });
