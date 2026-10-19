@@ -43,6 +43,9 @@ describe('deployment configuration gates',()=>{
     const source=await readFile(new URL('../scripts/migrate.ts',import.meta.url),'utf8');
     const grant='GRANT ${name} TO CURRENT_USER WITH SET TRUE';
     expect(source).toContain(grant);
+    expect(source).toContain('rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls');
+    expect(source).toContain('Runtime database role ${name} has elevated privileges.');
+    expect(source).not.toContain('ALTER ROLE ${name} WITH LOGIN NOSUPERUSER');
     expect(source.indexOf(grant)).toBeLessThan(source.indexOf('CREATE TABLE IF NOT EXISTS public.schema_migrations'));
   });
 });
