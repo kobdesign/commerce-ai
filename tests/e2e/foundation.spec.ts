@@ -9,6 +9,7 @@ test('health endpoint verifies the application database without requiring a sess
 test('owner can browse, search, add a non-clothing product, and inspect tool evidence',async({page})=>{
  await signIn(page);await page.getByLabel('เลือกร้านค้า',{exact:true}).selectOption(demo.shops.tiktok);await page.getByRole('link',{name:'สินค้า',exact:true}).click();
  await expect(page.getByRole('heading',{name:'สินค้า',exact:true})).toBeVisible();
+ const categoryFilter=page.getByLabel('กรองหมวดสินค้า');await expect(categoryFilter).toHaveCSS('appearance','none');await expect(categoryFilter).not.toHaveCSS('background-image','none');await expect(categoryFilter).toHaveCSS('padding-right','36px');
  await page.getByLabel('ค้นหาสินค้า').fill('CH-L-BK-32');await expect(page.getByText('CH-L-BK-32',{exact:true})).toBeVisible();await expect(page.getByText('CH-S-IV-L',{exact:true})).toHaveCount(0);
  await page.getByLabel('ค้นหาสินค้า').fill('');await page.getByRole('link',{name:'เพิ่มสินค้า',exact:true}).click();
  const sku='E2E-'+Date.now();await page.getByLabel('ชื่อสินค้า',{exact:true}).fill('สมุดทดสอบ');await page.getByLabel('รหัสสินค้า (SKU)',{exact:true}).fill(sku);await page.getByLabel('หมวดสินค้า',{exact:true}).fill('เครื่องเขียน');await page.getByLabel('ราคาขาย (บาท)',{exact:true}).fill('125.50');await page.getByRole('button',{name:'บันทึกสินค้า',exact:true}).click();
