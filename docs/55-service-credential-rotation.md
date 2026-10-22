@@ -58,9 +58,9 @@ Regression รวม `195/195` ผ่าน พร้อม typecheck, lint แ�
 - Usage count นับคำขอที่ผ่าน authorization และ commit สำเร็จ ไม่ใช่ billing meter หรือ security-event counter
 - คำขอที่ใช้ Secret สุ่มหรือผิด scope ถูกปฏิเสธ แต่รอบนี้ยังไม่เก็บรายละเอียดความล้มเหลวเพื่อหลีกเลี่ยงการสร้าง write amplification และข้อมูลโจมตีใน tenant telemetry
 - ยังไม่มี secret-manager integration, automatic rotation scheduler, mTLS หรือ SIEM export
-- ยังไม่มี OAuth/seller authorization, webhook endpoint หรือ provider-specific signing/rate-limit contract
+- TikTok seller authorization/token vault เพิ่มแล้วใน [docs/63](63-tiktok-shop-seller-authorization.md); ยังไม่มี Get Authorized Shops/Order API ที่ยืนยันกับ Development Shop, webhook endpoint หรือ provider-specific signing/rate-limit contract
 - Environment/Audience ลด accidental reuse แต่ bearer Secret ที่รั่วไหลยังต้องแก้ด้วย emergency revoke และการจัดเก็บ Secret ที่เหมาะสม
 
 ## งานถัดไป
 
-CON-API-01a: สร้าง connector ingress gateway และ provider adapter contract แบบ synthetic/read-only ใช้ Service Principal v1.29, ตรวจ signature/replay/rate-limit metadata และแปลงเฉพาะ safe canonical Event เข้า Inbox โดยยังไม่เขียน Order/Inventory และไม่อ้างว่าเข้ากันได้กับ API จริงจน DEC-05/06 กับ sandbox/API access พร้อม
+ใช้ Partner credential/Development Shop ทำ CON-TTS-01b: Get Authorized Shops + Order shadow แบบ read-only แล้วจึงสร้าง TikTok webhook adapter ที่ตรวจ signature/replay/rate-limit ตามสัญญาจริงและแปลงเฉพาะ safe canonical Event เข้า Inbox โดยยังไม่เขียน Order/Inventory

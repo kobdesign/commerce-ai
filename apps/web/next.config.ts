@@ -1,9 +1,9 @@
 import type { NextConfig } from 'next';
 const config: NextConfig = {
-  // TypeScript 6 exposes the compiler API. This avoids an intermittent empty
-  // stdout race in Next.js' experimental CLI wrapper during production builds.
-  experimental: { useTypeScriptCli: false },
-  transpilePackages: ['@commerce/db', '@commerce/contracts', '@commerce/domain', '@commerce/ai', '@commerce/imports'],
+  // TypeScript 6 exposes the compiler API. Worker threads avoid an intermittent
+  // child-process exit without diagnostics during production builds.
+  experimental: { useTypeScriptCli: false, workerThreads: true },
+  transpilePackages: ['@commerce/db', '@commerce/contracts', '@commerce/domain', '@commerce/ai', '@commerce/imports', '@commerce/integrations', '@commerce/connectors'],
   serverExternalPackages: ['pg', 'pg-boss'],
   poweredByHeader: false,
   async headers() {
