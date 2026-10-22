@@ -206,6 +206,14 @@
  .merchant-shop-settings>summary span{display:block;margin-left:18px}
 }
 
+/* Marketplace authorization: quiet operational UI with explicit read-only scope. */
+.marketplace-connections{max-width:980px}.marketplace-provider-card,.marketplace-setup{padding:22px}.marketplace-provider-card>header{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.marketplace-provider-title{display:flex;align-items:center;gap:13px}.marketplace-provider-title h2{margin:0;font-size:20px}.marketplace-provider-title p{margin:4px 0 0;color:var(--muted);font-size:13px}.marketplace-logo{display:grid;place-items:center;width:42px;height:42px;border:1px solid #bcc5cc;border-radius:6px;background:#14181b;color:#fff;font-size:20px;font-weight:650}
+.marketplace-connect-body{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:28px;align-items:center;padding:22px 0 4px}.marketplace-connect-body h3,.marketplace-readiness h3{font-size:15px;margin:0 0 8px}.marketplace-connect-body ol{margin:0;padding-left:22px;color:var(--muted);font-size:13px;line-height:1.9}.marketplace-connect-body .button{min-height:44px}
+.marketplace-readiness{margin-top:18px;border-left:3px solid #a87539;background:#fbf8f3;padding:15px 17px}.marketplace-readiness p,.marketplace-readiness ul{font-size:13px;color:var(--muted)}.marketplace-readiness ul{margin:7px 0 0;padding-left:20px}
+.marketplace-connection-detail{padding:20px 0 8px}.marketplace-connection-detail dl,.marketplace-setup dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border-block:1px solid var(--line)}.marketplace-connection-detail dl>div,.marketplace-setup dl>div{padding:12px}.marketplace-connection-detail dt,.marketplace-setup dt{font-size:12px;color:var(--muted)}.marketplace-connection-detail dd,.marketplace-setup dd{margin:4px 0 0;font-size:13px;overflow-wrap:anywhere}.marketplace-connection-detail .field-help{display:flex;align-items:center;gap:7px;margin:14px 0 0}.marketplace-setup h2{font-size:18px;margin-top:0}.marketplace-setup a{display:inline-flex;align-items:center;gap:5px}.marketplace-setup code{overflow-wrap:anywhere}
+@media(max-width:680px){.marketplace-provider-card,.marketplace-setup{padding:17px}.marketplace-connect-body{grid-template-columns:1fr;gap:18px}.marketplace-connect-body .button,.marketplace-provider-card>.button{width:100%}.marketplace-connection-detail dl,.marketplace-setup dl{grid-template-columns:1fr}.marketplace-provider-card>header{align-items:center}.marketplace-provider-title{align-items:flex-start}}
+
 /* Keep call-to-action links inside empty states visually consistent with buttons. */
 .empty-state a.button{display:inline-flex}
 .empty-state a.button.primary{color:#fff}

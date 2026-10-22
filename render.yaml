@@ -18,6 +18,18 @@ services:
         value: 22.20.0
       - key: STAGING_DEMO_PASSWORD
         sync: false
+      - key: TIKTOK_SHOP_ENVIRONMENT
+        value: development
+      - key: TIKTOK_SHOP_APP_KEY
+        sync: false
+      - key: TIKTOK_SHOP_APP_SECRET
+        sync: false
+      - key: TIKTOK_SHOP_SELLER_AUTH_URL
+        sync: false
+      - key: TIKTOK_SHOP_OAUTH_STATE_SECRET
+        sync: false
+      - key: TIKTOK_SHOP_TOKEN_ENCRYPTION_KEY
+        sync: false
       - key: ADMIN_DATABASE_URL
         fromDatabase:
           name: commerce-ai-staging-db

@@ -36,7 +36,7 @@ try {
   const sql=await readFile(new URL('../packages/db/migrations/'+name,import.meta.url),'utf8');
   const checksum=createHash('sha256').update(sql).digest('hex');
   const prior=await client.query('SELECT checksum FROM public.schema_migrations WHERE name=$1',[name]);
-  if(prior.rowCount && prior.rows[0].checksum!==checksum) throw new Error('Applied migration changed. Add a new migration instead.');
+  if(prior.rowCount && prior.rows[0].checksum!==checksum) throw new Error(`Applied migration changed: ${name}. Add a new migration instead.`);
   if(!prior.rowCount) {
     await client.query(sql);
     await client.query('INSERT INTO public.schema_migrations(name,checksum) VALUES($1,$2)',[name,checksum]);

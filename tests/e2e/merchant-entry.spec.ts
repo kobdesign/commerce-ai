@@ -9,7 +9,7 @@ async function signIn(page:Page,email='owner@chino.demo'){
  await page.getByRole('button',{name:'เข้าสู่พื้นที่ทำงาน'}).click();
  await expect(page.getByRole('heading',{name:'ภาพรวม',exact:true})).toBeVisible();
 }
-const allRoutes=['/','/catalog','/inventory','/orders','/imports','/performance','/ai','/settlements','/financial-events','/expenses','/reviews','/team','/activity','/integrations/inbox','/team/service-access','/support/poc'];
+const allRoutes=['/','/catalog','/inventory','/orders','/imports','/performance','/ai','/settlements','/financial-events','/expenses','/reviews','/team','/integrations/marketplaces','/activity','/integrations/inbox','/team/service-access','/support/poc'];
 
 test('owner starts from familiar tasks and can still find every existing workspace tool',async({page})=>{
  await signIn(page);

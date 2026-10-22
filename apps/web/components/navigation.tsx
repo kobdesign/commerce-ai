@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState,useSyncExternalStore } from 'react';
-import { LayoutDashboard,Package,ShoppingBag,Sparkles,Users,History,ChevronDown,FileInput,ChartNoAxesCombined,ClipboardCheck,ReceiptText,WalletCards,Landmark,Headset,Inbox,KeyRound,Warehouse } from 'lucide-react';
+import { LayoutDashboard,Package,ShoppingBag,Sparkles,Users,History,ChevronDown,FileInput,ChartNoAxesCombined,ClipboardCheck,ReceiptText,WalletCards,Landmark,Headset,Inbox,KeyRound,Warehouse,Plug } from 'lucide-react';
 import { switchOrganization,switchShop } from '../app/actions';
 import type { Role } from '@commerce/contracts';
 const financialRoles:Role[]=['owner','finance','auditor'];
@@ -25,7 +25,8 @@ const groups:{label:string;links:NavLink[]}[]=[
   {href:'/reviews',label:'รายการที่ต้องตรวจ',icon:ClipboardCheck,roles:financialRoles}
  ]},
  {label:'ตั้งค่าและเครื่องมือเพิ่มเติม',links:[
-  {href:'/team',label:'ทีมและสิทธิ์',icon:Users,roles:['owner']},
+ {href:'/team',label:'ทีมและสิทธิ์',icon:Users,roles:['owner']},
+  {href:'/integrations/marketplaces',label:'เชื่อมช่องทางขาย',icon:Plug,roles:['owner','operator','auditor']},
   {href:'/activity',label:'ประวัติการทำงาน',icon:History,roles:['owner','auditor']},
   {href:'/integrations/inbox',label:'รายการรับจากระบบเชื่อมต่อ',icon:Inbox,roles:['owner','operator','auditor']},
   {href:'/team/service-access',label:'สิทธิ์ระบบเชื่อมต่อ',icon:KeyRound,roles:['owner','auditor']},
