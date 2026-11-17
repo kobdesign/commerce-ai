@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "evidenceId": "EVE-ALERT-BRIDGE-FOUNDATION-20261117-01",
+  "recordedAt": "2026-11-17T11:58:08.872Z",
+  "status": "engineering-foundation-passed-external-delivery-pending",
+  "scope": "synthetic-local-only",
+  "checks": {
+    "validSignatureAccepted": true,
+    "safeProjection": true,
+    "replayRejected": true,
+    "tamperRejected": true,
+    "staleRejected": true,
+    "scopeMismatchRejected": true,
+    "extraContentRejected": true
+  },
+  "controls": {
+    "signature": "HMAC-SHA256 exact raw body with constant-time comparison",
+    "expectedEnvironment": "staging",
+    "allowedSources": [
+      "commerce-agent-canary-monitor"
+    ],
+    "freshnessWindowSeconds": 300,
+    "futureSkewSeconds": 60,
+    "replayProtection": "atomic store contract; in-memory implementation used for rehearsal only",
+    "bodyLimitBytes": 16384,
+    "contentCaptured": false
+  },
+  "externalDelivery": {
+    "provider": null,
+    "deliveryVerified": false,
+    "humanAcknowledgementVerified": false,
+    "durableReplayStoreVerified": false
+  },
+  "safety": {
+    "liveAiCalls": 0,
+    "marketplaceWrites": 0,
+    "databaseMutations": 0,
+    "productionTenantDataUsed": false
+  },
+  "limitations": [
+    "No external provider received this alert.",
+    "No human acknowledgement or escalation was tested.",
+    "The rehearsal replay store is process-local; deployment requires a shared durable store with atomic consume semantics.",
+    "This file must not be linked as alertDeliveryDryRun evidence until external delivery and acknowledgement are verified."
+  ]
+}

@@ -57,6 +57,7 @@ export function deploymentConfiguration(service:RuntimeService,env:RuntimeEnviro
 }
 
 export * from './monitoring';
+export * from './alert-verification';
 export * from './production-decisions';
 export * from './agent-canary-readiness';
 export * from './agent-canary-monitoring';
