@@ -58,6 +58,10 @@ export function deploymentConfiguration(service:RuntimeService,env:RuntimeEnviro
 
 export * from './monitoring';
 export * from './production-decisions';
+export * from './agent-canary-readiness';
+export * from './agent-canary-monitoring';
+export * from './agent-canary-staging-plan';
+export * from './agent-ai-gateway-budget';
 
 export function assertDeploymentConfiguration(service:RuntimeService,env:RuntimeEnvironment=process.env){
   const report=deploymentConfiguration(service,env);

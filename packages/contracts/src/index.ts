@@ -172,7 +172,7 @@ export const integrationInboxActionInput=z.object({
   reason:z.string().trim().min(3).max(500),
   confirmed:z.literal(true),
 }).strict();
-export const servicePrincipalScopes=['integration:ingest','integration:read','outbox:publish'] as const;
+export const servicePrincipalScopes=['integration:ingest','integration:read','outbox:publish','catalog:read','sales:read','inventory:read'] as const;
 export type ServicePrincipalScope=typeof servicePrincipalScopes[number];
 export const servicePrincipalEnvironments=['development','staging','production'] as const;
 export type ServicePrincipalEnvironment=typeof servicePrincipalEnvironments[number];
@@ -197,6 +197,21 @@ export const servicePrincipalRevokeInput=z.object({
   reason:z.string().trim().min(3).max(500),
   confirmed:z.literal(true),
 }).strict();
+export const agentRouteEnvironments=['development','staging'] as const;
+export type AgentRouteEnvironment=typeof agentRouteEnvironments[number];
+export const agentRouteProposalInput=z.object({
+  version:z.number().int().min(0),
+  environment:z.enum(agentRouteEnvironments),
+  expiresAt:z.string().datetime({offset:true}),
+  reason:z.string().trim().min(10).max(500),
+  confirmed:z.literal(true),
+}).strict();
+export const agentRouteApprovalInput=z.object({
+  version:z.number().int().positive(),
+  reason:z.string().trim().min(10).max(500),
+  confirmed:z.literal(true),
+}).strict();
+export const agentRouteRevocationInput=agentRouteApprovalInput;
 export type OptionAxis={name:string;values:string[]};
 export function buildCombinations(axes:OptionAxis[]):Record<string,string>[] {
   if(!axes.length||axes.length>3)throw new Error('กำหนดตัวเลือก 1–3 ประเภท');

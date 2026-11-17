@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "amendmentId": "EVE-CANARY-BUDGET-20261116-01",
+  "scope": "staging-synthetic-read-only",
+  "subject": "github:kobdesign",
+  "role": "BootstrapOwner",
+  "confirmedAt": "2026-11-16T06:28:56Z",
+  "source": "direct-owner-instruction-in-project-session",
+  "instruction": "ตั้งงบ AI Gateway ระดับโปรเจกต์ $5/เดือน",
+  "supersedes": {
+    "evidence": "docs/evidence/eve-canary-bootstrap-approval-2026-11-16.json",
+    "field": "approvedParameters.monthlyBudgetUsd",
+    "previousValue": 20
+  },
+  "approvedValue": {
+    "currency": "USD",
+    "monthlyBudget": 5,
+    "scope": "vercel-project",
+    "projectName": "commerce-ai-agent-poc"
+  },
+  "configuration": "config/eve-ai-gateway-budget.json",
+  "limitations": [
+    "This amendment changes only the monthly project budget; the approved per-run maximum remains USD 0.10.",
+    "Platform enforcement requires a successful Vercel budget sync and separate verification evidence.",
+    "This amendment does not enable live AI, production, real-tenant data or Commerce mutations."
+  ]
+}

@@ -5,6 +5,7 @@ export type ProbeResult={status:ProbeStatus;httpStatus:number|null;reason:'none'
 export type RuntimeObservation={status:'healthy'|'unavailable';observedAt:string;health:ProbeResult;readiness:ProbeResult&{checks?:Record<string,'ok'|'unavailable'>}};
 export type RuntimeAlert={schemaVersion:'1';eventId:string;source:'commerce-runtime-monitor';environment:string;status:'unavailable'|'recovered';observedAt:string;checks:{health:ProbeResult;readiness:ProbeResult&{checks?:Record<string,'ok'|'unavailable'>}}};
 type Fetcher=(input:string|URL|Request,init?:RequestInit)=>Promise<Response>;
+type SignedAlert={eventId:string;observedAt:string};
 const readinessKeys=['configuration','applicationDatabase','identityDatabase','worker','importQueue'] as const;
 
 async function probe(baseUrl:string,path:'/api/health'|'/api/ready',timeoutMs:number,fetcher:Fetcher){
@@ -72,7 +73,7 @@ export function signAlert(body:string,timestamp:string,secret:string){
   return `sha256=${createHmac('sha256',secret).update(`${timestamp}.${body}`).digest('hex')}`;
 }
 
-export async function deliverRuntimeAlert(alert:RuntimeAlert,url:string,secret:string,options:{fetcher?:Fetcher;attempts?:number;backoffMs?:number}={}){
+export async function deliverSignedAlert<Alert extends SignedAlert>(alert:Alert,url:string,secret:string,options:{fetcher?:Fetcher;attempts?:number;backoffMs?:number}={}){
   const fetcher=options.fetcher??fetch,attempts=options.attempts??3,backoffMs=options.backoffMs??250;
   const body=JSON.stringify(alert),timestamp=alert.observedAt,signature=signAlert(body,timestamp,secret);
   let lastStatus:number|null=null;
@@ -84,4 +85,8 @@ export async function deliverRuntimeAlert(alert:RuntimeAlert,url:string,secret:s
     if(attempt<attempts&&backoffMs>0)await new Promise(resolve=>setTimeout(resolve,backoffMs*2**(attempt-1)));
   }
   throw new Error(`Alert delivery failed after ${attempts} attempts${lastStatus===null?'':` (HTTP ${lastStatus})`}.`);
+}
+
+export function deliverRuntimeAlert(alert:RuntimeAlert,url:string,secret:string,options:{fetcher?:Fetcher;attempts?:number;backoffMs?:number}={}){
+  return deliverSignedAlert(alert,url,secret,options);
 }

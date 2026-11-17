@@ -9,12 +9,19 @@ import { catalogEvidence } from '@commerce/ai';
 import { audit } from '@commerce/domain';
 import { commitDraft } from '@commerce/imports';
 import { activeOutboxConsumers,claimOutboxDeliveries,consumeInternalOutboxDelivery,failOutboxDelivery,type OutboxDelivery } from '@commerce/integrations';
+import {
+  CommerceCleanupDispatchError,
+  commerceCleanupDispatcherConfiguration,
+  dispatchCommerceSessionCleanup,
+  type CommerceCleanupDispatch,
+} from '@commerce/agent-session/cleanup-client';
 
 assertDeploymentConfiguration('worker');
 if(!process.env.QUEUE_DATABASE_URL)throw new Error('QUEUE_DATABASE_URL required');
 const queueConnection=process.env.QUEUE_DATABASE_URL;
 const workerName=`${hostname().slice(0,80)}:${process.pid}`;
 const queuePool=new Pool({connectionString:queueConnection,max:2,connectionTimeoutMillis:5000});
+const cleanupConfiguration=commerceCleanupDispatcherConfiguration(process.env);
 const boss=new PgBoss({connectionString:queueConnection,schema:'jobs',createSchema:false});
 boss.on('error',()=>console.error('Queue error; inspect database connectivity.'));
 
@@ -116,12 +123,79 @@ async function outboxLoop(){
   }
 }
 const outboxLoopPromise=outboxLoop();
-console.log('Worker listening: catalog-check, import commits and internal integration outbox.');
+let grantMaintenanceInFlight:Promise<void>|null=null;
+async function maintainAgentSessionGrants(){
+  try{
+    const sessionResult=await queuePool.query<{sessions_ended:number;abandoned_recorded:number;sessions_deleted:number}>(
+      'SELECT * FROM app.maintain_agent_sessions($1)',[500],
+    );
+    const sessionCounts=sessionResult.rows[0];
+    if(sessionCounts&&Object.values(sessionCounts).some(value=>Number(value)>0))console.log('Agent session lifecycle maintenance completed.',sessionCounts);
+    const result=await queuePool.query<{expired_recorded:number;grants_deleted:number;events_deleted:number;rate_limits_deleted:number}>(
+      'SELECT * FROM app.maintain_agent_session_grants($1)',[500],
+    );
+    const counts=result.rows[0];
+    if(counts&&Object.values(counts).some(value=>Number(value)>0))console.log('Agent session grant maintenance completed.',counts);
+  }catch{console.error('Agent session lifecycle maintenance failed; retrying on the next bounded interval.');}
+}
+function scheduleGrantMaintenance(){
+  if(grantMaintenanceInFlight)return;
+  grantMaintenanceInFlight=maintainAgentSessionGrants().finally(()=>{grantMaintenanceInFlight=null;});
+}
+scheduleGrantMaintenance();
+const grantMaintenanceTimer=setInterval(scheduleGrantMaintenance,60*60*1000);
+grantMaintenanceTimer.unref();
+let reconciliationInFlight:Promise<void>|null=null;
+type CleanupClaim=CommerceCleanupDispatch&{attemptCount:number};
+async function dispatchCleanup(item:CleanupClaim){
+  if(!cleanupConfiguration)return;
+  try{
+    const receipt=await dispatchCommerceSessionCleanup(item,cleanupConfiguration);
+    await queuePool.query('SELECT * FROM app.complete_agent_session_cleanup_reconciliation($1,$2,$3)',[
+      item.tenantId,item.intentId,receipt.deliveryId,
+    ]);
+  }catch(error){
+    const code=error instanceof CommerceCleanupDispatchError?error.code:'EVE_CLEANUP_UNAVAILABLE';
+    await queuePool.query('SELECT * FROM app.fail_agent_session_cleanup_reconciliation($1,$2,$3)',[
+      item.tenantId,item.intentId,code,
+    ]);
+  }
+}
+async function dispatchAgentSessionCleanup(){
+  if(!cleanupConfiguration)return;
+  const result=await queuePool.query<{
+    tenantId:string;intentId:string;sessionId:string;attemptCount:number;
+  }>(`SELECT tenant_id AS "tenantId",intent_id AS "intentId",session_id AS "sessionId",attempt_count AS "attemptCount"
+      FROM app.claim_agent_session_cleanup_reconciliations($1)`,[20]);
+  await Promise.all(result.rows.map(dispatchCleanup));
+  if(result.rowCount)console.log('Agent session cleanup dispatch completed.',{claimed:result.rowCount});
+}
+async function reconcileAgentSessionLifecycle(){
+  try{
+    await dispatchAgentSessionCleanup();
+    const result=await queuePool.query<{
+      sessions_finalized:number;intents_retried:number;intents_failed:number;intents_timed_out:number;
+    }>('SELECT * FROM app.process_agent_session_reconciliations($1)',[100]);
+    const counts=result.rows[0];
+    if(counts&&Object.values(counts).some(value=>Number(value)>0)){
+      console.log('Agent session lifecycle reconciliation completed.',counts);
+    }
+  }catch{console.error('Agent session lifecycle reconciliation failed; retrying on the next bounded interval.');}
+}
+function scheduleLifecycleReconciliation(){
+  if(reconciliationInFlight)return;
+  reconciliationInFlight=reconcileAgentSessionLifecycle().finally(()=>{reconciliationInFlight=null;});
+}
+scheduleLifecycleReconciliation();
+const reconciliationTimer=setInterval(scheduleLifecycleReconciliation,30_000);
+reconciliationTimer.unref();
+console.log('Worker listening: catalog-check, import commits, internal integration outbox and agent session lifecycle reconciliation.');
 
 async function stop(){
   if(stopping)return;stopping=true;
-  clearInterval(heartbeatTimer);
-  if(heartbeatInFlight)await heartbeatInFlight;
+  clearInterval(heartbeatTimer);clearInterval(grantMaintenanceTimer);clearInterval(reconciliationTimer);
+  if(heartbeatInFlight)await heartbeatInFlight;if(grantMaintenanceInFlight)await grantMaintenanceInFlight;
+  if(reconciliationInFlight)await reconciliationInFlight;
   await Promise.all([importLoopPromise,outboxLoopPromise]);await boss.stop();await queuePool.end();
   try{await stopServiceHeartbeat('worker',workerName);}catch{console.error('Could not mark worker heartbeat stopped.');}
   await closePools();

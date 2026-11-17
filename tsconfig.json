@@ -3,6 +3,7 @@
     "target": "ES2022", "lib": ["dom", "dom.iterable", "ES2022"],
     "strict": true, "noEmit": true, "skipLibCheck": true, "esModuleInterop": true,
     "module": "ESNext", "moduleResolution": "Bundler", "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx", "allowJs": true, "isolatedModules": true,
     "paths": {"@commerce/*": ["./packages/*/src/index.ts"]}
   },

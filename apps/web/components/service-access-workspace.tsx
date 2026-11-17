@@ -7,7 +7,7 @@ import type { Shop } from '@commerce/domain';
 import type { CreatedServicePrincipal,ServiceCredentialSummary,ServicePrincipal,ServicePrincipalWorkspace } from '@commerce/integrations';
 import { request } from '../lib/client';
 
-const scopeLabels:Record<ServicePrincipalScope,string>={'integration:ingest':'รับ Event เข้า Inbox','integration:read':'อ่านสถานะ Integration','outbox:publish':'ส่ง Event ออกจาก Outbox'};
+const scopeLabels:Record<ServicePrincipalScope,string>={'integration:ingest':'รับ Event เข้า Inbox','integration:read':'อ่านสถานะ Integration','outbox:publish':'ส่ง Event ออกจาก Outbox','catalog:read':'อ่านสินค้าให้ AI','sales:read':'อ่านยอดขายรวมให้ AI','inventory:read':'อ่านสต็อกให้ AI'};
 const environmentLabels:Record<ServicePrincipalEnvironment,string>={development:'Development',staging:'Staging',production:'Production'};
 const credentialStatusLabels:Record<ServiceCredentialSummary['status'],string>={active:'ใช้งานอยู่',retiring:'กำลังเปลี่ยน',retired:'หยุดใช้แล้ว',expired:'หมดอายุ',revoked:'เพิกถอนแล้ว'};
 const dateTime=(value:string)=>new Intl.DateTimeFormat('th-TH',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value));

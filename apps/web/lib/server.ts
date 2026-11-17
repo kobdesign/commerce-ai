@@ -39,10 +39,11 @@ export async function mutationInput(req:Request,maxBytes=32768){
 export async function respond(fn:()=>Promise<unknown>){
   try{return NextResponse.json(await fn(),{headers:{'Cache-Control':'private, no-store'}});}
   catch(e){
-    if(e instanceof AppError)return NextResponse.json({error:e.message,code:e.code},{status:e.status});
-    if(e instanceof ZodError)return NextResponse.json({error:'กรุณาตรวจข้อมูลที่กรอก',code:'VALIDATION'},{status:400});
-    if(typeof e==='object'&&e&&'code'in e&&e.code==='23505')return NextResponse.json({error:'รหัสนี้มีอยู่แล้ว กรุณาใช้รหัสใหม่',code:'DUPLICATE'},{status:409});
+    const options=(status:number)=>({status,headers:{'Cache-Control':'private, no-store'}});
+    if(e instanceof AppError)return NextResponse.json({error:e.message,code:e.code},options(e.status));
+    if(e instanceof ZodError)return NextResponse.json({error:'กรุณาตรวจข้อมูลที่กรอก',code:'VALIDATION'},options(400));
+    if(typeof e==='object'&&e&&'code'in e&&e.code==='23505')return NextResponse.json({error:'รหัสนี้มีอยู่แล้ว กรุณาใช้รหัสใหม่',code:'DUPLICATE'},options(409));
     console.error('Request failed:',e instanceof Error?e.name:'Unknown');
-    return NextResponse.json({error:'ไม่สามารถดำเนินการได้ในขณะนี้',code:'INTERNAL'},{status:500});
+    return NextResponse.json({error:'ไม่สามารถดำเนินการได้ในขณะนี้',code:'INTERNAL'},options(500));
   }
 }

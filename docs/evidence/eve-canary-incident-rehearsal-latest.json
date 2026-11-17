@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "scope": "synthetic tenant only",
+  "policy": {
+    "profileId": "eve-canary-synthetic-rehearsal-v1",
+    "classification": "engineering-rehearsal-only",
+    "approvalStatus": "not-approved",
+    "sloStatus": "not-approved",
+    "incidentOwnershipStatus": "not-approved"
+  },
+  "checks": {
+    "baselineHealthy": true,
+    "crossTenantSignalExcluded": true,
+    "firstBreachSuppressed": true,
+    "thresholdBreachDetected": true,
+    "signedAlertDelivered": true,
+    "killSwitchSelectedLegacy": true,
+    "killSwitchPreventedEveCall": true,
+    "firstRecoverySuppressed": true,
+    "recoveryDetected": true,
+    "metadataOnly": true
+  },
+  "metrics": {
+    "baseline": {
+      "routeDecisions": 2,
+      "eveRoutes": 2,
+      "legacyRoutes": 0,
+      "sessionsStarted": 1,
+      "sessionsCompleted": 1,
+      "fallbacks": 0,
+      "errors": 0,
+      "reportedCostUsd": 0.02,
+      "unavailableCostEvents": 0,
+      "fallbackRatePercent": 0,
+      "errorRatePercent": 0,
+      "grantsIssued": 1,
+      "grantsConsumed": 1,
+      "grantReplays": 0,
+      "grantsRevoked": 0,
+      "grantsExpired": 0,
+      "grantRateLimited": 0
+    },
+    "breach": {
+      "routeDecisions": 2,
+      "eveRoutes": 2,
+      "legacyRoutes": 0,
+      "sessionsStarted": 1,
+      "sessionsCompleted": 1,
+      "fallbacks": 1,
+      "errors": 1,
+      "reportedCostUsd": 0.22,
+      "unavailableCostEvents": 0,
+      "fallbackRatePercent": 50,
+      "errorRatePercent": 50,
+      "grantsIssued": 1,
+      "grantsConsumed": 1,
+      "grantReplays": 2,
+      "grantsRevoked": 0,
+      "grantsExpired": 1,
+      "grantRateLimited": 1
+    }
+  },
+  "alert": {
+    "delivery": "in-memory signed webhook verifier",
+    "signature": "verified; secret omitted"
+  },
+  "liveAiCalls": 0,
+  "marketplaceWrites": 0,
+  "databaseMutations": 0,
+  "limitations": [
+    "Engineering rehearsal thresholds are not an approved SLO.",
+    "No external alert provider or human incident acknowledgement was tested.",
+    "No production tenant, credential, model or marketplace account was used."
+  ]
+}

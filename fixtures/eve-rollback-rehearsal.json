@@ -1,0 +1,12 @@
+{
+  "version": "eve-rollback-rehearsal-v1",
+  "synthetic": true,
+  "enabledTenantId": "20000000-0000-4000-8000-000000000001",
+  "controlTenantId": "20000000-0000-4000-8000-000000000002",
+  "commerceSnapshot": {
+    "inventory": [
+      { "variantId": "50000000-0000-4000-8000-000000000001", "onHand": 30, "reserved": 5, "available": 25, "balanceVersion": 7 }
+    ],
+    "financial": { "settlementCount": 4, "confirmedGrossMinor": 1289000, "ledgerVersion": 11 }
+  }
+}

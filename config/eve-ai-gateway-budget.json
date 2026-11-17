@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "provider": "vercel-ai-gateway",
+  "scope": "project",
+  "target": {
+    "projectId": "prj_UOyEimal3Gvf7pVOhdA8xWT0PhLC",
+    "projectName": "commerce-ai-agent-poc",
+    "teamId": "team_5K62merwClj9htbBeeUOmu9V"
+  },
+  "currency": "USD",
+  "limit": 5,
+  "refreshPeriod": "monthly",
+  "approvedBy": {
+    "subject": "github:kobdesign",
+    "role": "BootstrapOwner"
+  },
+  "approvedAt": "2026-11-16T06:28:56Z",
+  "platformSync": {
+    "status": "applied",
+    "lastVerifiedAt": "2026-11-16T06:31:46Z",
+    "evidence": "docs/evidence/eve-ai-gateway-project-budget-2026-11-16.json"
+  },
+  "applyCommand": "vercel ai-gateway budgets set project commerce-ai-agent-poc --amount 5 --refresh-period monthly --scope abhisak-c --json",
+  "limitations": [
+    "This file is the reviewed desired state; Vercel enforces the cap only after platform sync succeeds.",
+    "The request that crosses a Vercel AI Gateway budget can complete, so the limit is a soft cap.",
+    "Only OIDC-authenticated requests attributed to this Vercel project are covered by the project budget.",
+    "BYOK provider spend is outside this budget and remains disabled for the Commerce canary."
+  ]
+}

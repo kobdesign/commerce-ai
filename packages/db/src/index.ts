@@ -1,6 +1,14 @@
 import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { AppError, type Context, type Role } from '@commerce/contracts';
+import {
+  agentRouteApprovalInput,
+  agentRouteProposalInput,
+  agentRouteRevocationInput,
+  AppError,
+  type AgentRouteEnvironment,
+  type Context,
+  type Role,
+} from '@commerce/contracts';
 
 const globalDb=globalThis as unknown as {commercePool?:Pool;identityPool?:Pool};
 export function pool(){
@@ -65,5 +73,273 @@ export async function operationalControlEnabled(control:OperationalControlName){
 }
 export async function assertOperationalControl(control:OperationalControlName){
   if(!await operationalControlEnabled(control))throw new AppError(503,'OPERATION_PAUSED','ระบบหยุดรับการเปลี่ยนแปลงชั่วคราว กรุณาลองใหม่ภายหลัง');
+}
+export type AgentServiceAuthorizationInput={
+  credentialHash:string;shopIds:string[];requiredScope:'catalog:read'|'sales:read'|'inventory:read';
+  environment:'development'|'staging'|'production';audience:'commerce-agent-api';requestId:string;requestTimestamp:string;
+  method:'POST';path:string;bodyHash:string;requestHash:string;
+};
+export type AgentServiceAuthorization={
+  tenantId:string;principalId:string;shopIds:string[];scopes:Array<'catalog:read'|'sales:read'|'inventory:read'>;
+  environment:'development'|'staging'|'production';audience:'commerce-agent-api';authenticatedAt:Date;expiresAt:Date;replayed:boolean;
+};
+export async function authorizeAgentServiceRequest(input:AgentServiceAuthorizationInput):Promise<AgentServiceAuthorization>{
+  const result=await pool().query<AgentServiceAuthorization>(`SELECT tenant_id AS "tenantId",principal_id AS "principalId",shop_ids AS "shopIds",scopes,
+    environment,audience,authenticated_at AS "authenticatedAt",expires_at AS "expiresAt",replayed
+    FROM app.authorize_agent_service_request($1,$2::uuid[],$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[
+    input.credentialHash,input.shopIds,input.requiredScope,input.environment,input.audience,input.requestId,input.requestTimestamp,
+    input.method,input.path,input.bodyHash,input.requestHash,
+  ]);
+  if(!result.rows[0])throw new Error('AGENT_AUTHORIZATION_EMPTY');
+  return result.rows[0];
+}
+export type AgentServiceResultInput={tenantId:string;requestId:string;principalId:string;operation:'products.query'|'sales.query'|'inventory.query';bodyHash:string};
+export async function readAgentServiceRequestResult(input:AgentServiceResultInput){
+  const result=await pool().query<{payload:unknown|null}>(
+    'SELECT app.read_agent_service_request_result($1,$2,$3,$4,$5) AS payload',
+    [input.tenantId,input.requestId,input.principalId,input.operation,input.bodyHash],
+  );
+  return result.rows[0]?.payload??null;
+}
+export async function storeAgentServiceRequestResult(input:AgentServiceResultInput&{payload:unknown}){
+  const result=await pool().query<{payload:unknown}>(
+    'SELECT app.store_agent_service_request_result($1,$2,$3,$4,$5,$6::jsonb) AS payload',
+    [input.tenantId,input.requestId,input.principalId,input.operation,input.bodyHash,JSON.stringify(input.payload)],
+  );
+  if(!result.rows[0])throw new Error('AGENT_RESULT_EMPTY');
+  return result.rows[0].payload;
+}
+type AgentReadBaseInput={tenantId:string;requestId:string;shopIds:string[];limit:number;offset:number};
+export type AgentProductReadInput=AgentReadBaseInput&{search:string;category?:string;status:'active'|'archived'|'all';variantIds?:string[]};
+export type AgentSalesReadInput=AgentReadBaseInput&{from:string;to:string;variantIds?:string[];granularity:'variant'|'variant_channel'|'variant_day';orderStates:Array<'open'|'completed'|'cancelled'>};
+export type AgentInventoryReadInput=AgentReadBaseInput&{search:string;variantIds?:string[];availability:'all'|'available'|'low'|'out'|'reserved';includeChannelAllocation:boolean};
+
+async function readAgentPayload(sql:string,params:unknown[]){
+  const result=await pool().query<{payload:unknown}>(sql,params);
+  if(!result.rows[0])throw new Error('AGENT_READ_EMPTY');
+  return result.rows[0].payload;
+}
+export function readAgentProducts(input:AgentProductReadInput){
+  return readAgentPayload('SELECT app.read_agent_products($1,$2,$3::uuid[],$4,$5,$6,$7::uuid[],$8,$9) AS payload',[
+    input.tenantId,input.requestId,input.shopIds,input.search,input.category??null,input.status,input.variantIds??null,input.limit,input.offset,
+  ]);
+}
+export function readAgentSales(input:AgentSalesReadInput){
+  return readAgentPayload('SELECT app.read_agent_sales($1,$2,$3::uuid[],$4::date,$5::date,$6::uuid[],$7,$8::text[],$9,$10) AS payload',[
+    input.tenantId,input.requestId,input.shopIds,input.from,input.to,input.variantIds??null,input.granularity,input.orderStates,input.limit,input.offset,
+  ]);
+}
+export function readAgentInventory(input:AgentInventoryReadInput){
+  return readAgentPayload('SELECT app.read_agent_inventory($1,$2,$3::uuid[],$4,$5::uuid[],$6,$7,$8,$9) AS payload',[
+    input.tenantId,input.requestId,input.shopIds,input.search,input.variantIds??null,input.availability,input.includeChannelAllocation,input.limit,input.offset,
+  ]);
+}
+
+export type AgentSessionGrantClaims={
+  tenantId:string;grantId:string;subject:string;shopIds:string[];
+  role:Role;environment:'development'|'staging';issuedAt:number;expiresAt:number;
+  capability:'create'|'continue';sessionId:string|null;
+};
+export async function consumeAgentSessionGrant(claims:AgentSessionGrantClaims){
+  if(claims.capability==='create'){
+    const result=await pool().query<{grantId:string;consumedAt:Date}>(
+      `SELECT grant_id AS "grantId",consumed_at AS "consumedAt"
+       FROM app.consume_agent_session_grant($1,$2,$3,$4::uuid[],$5,$6,to_timestamp($7),to_timestamp($8))`,
+      [claims.tenantId,claims.grantId,claims.subject,claims.shopIds,claims.role,claims.environment,claims.issuedAt,claims.expiresAt],
+    );
+    if(!result.rows[0])throw new Error('AGENT_SESSION_GRANT_UNAVAILABLE');
+    return result.rows[0];
+  }
+  const result=await pool().query<{grantId:string;consumedAt:Date}>(
+    `SELECT grant_id AS "grantId",consumed_at AS "consumedAt"
+     FROM app.consume_agent_session_grant_v2($1,$2,$3,$4::uuid[],$5,$6,to_timestamp($7),to_timestamp($8),$9,$10)`,
+    [claims.tenantId,claims.grantId,claims.subject,claims.shopIds,claims.role,claims.environment,
+      claims.issuedAt,claims.expiresAt,claims.capability,claims.sessionId],
+  );
+  if(!result.rows[0])throw new Error('AGENT_SESSION_GRANT_UNAVAILABLE');
+  return result.rows[0];
+}
+
+export type AgentSessionContinuation={sessionId:string;shopIds:string[];role:Role;policyVersion:number|null;expiresAt:Date};
+export async function readAgentSessionForContinuation(ctx:Context,sessionId:string,environment:'development'|'staging'){
+  return withTenant(ctx,async tx=>{
+    const rows=await tx.query<AgentSessionContinuation>(
+      `SELECT session_id AS "sessionId",shop_ids AS "shopIds",role,policy_version AS "policyVersion",expires_at AS "expiresAt"
+       FROM app.read_agent_session_for_continuation($1,$2)`,[sessionId,environment],
+    );
+    if(!rows[0])throw new Error('AGENT_SESSION_UNAVAILABLE');
+    return rows[0];
+  });
+}
+
+export async function bindAgentSession(ctx:Context,input:{grantId:string;sessionId:string;expiresAt:Date}){
+  return withTenant(ctx,async tx=>{
+    const rows=await tx.query<{sessionId:string;expiresAt:Date}>(
+      `SELECT session_id AS "sessionId",expires_at AS "expiresAt" FROM app.bind_agent_session($1,$2,$3)`,
+      [input.grantId,input.sessionId,input.expiresAt],
+    );
+    if(!rows[0])throw new Error('AGENT_SESSION_BIND_UNAVAILABLE');
+    return rows[0];
+  });
+}
+
+export async function abandonAgentSession(ctx:Context,input:{grantId:string;sessionId:string;reason:string}){
+  return withTenant(ctx,async tx=>{
+    const rows=await tx.query<{sessionId:string;status:'abandoned'}>(
+      `SELECT session_id AS "sessionId",status FROM app.abandon_agent_session($1,$2,$3)`,
+      [input.grantId,input.sessionId,input.reason],
+    );
+    if(!rows[0])throw new Error('AGENT_SESSION_ABANDON_UNAVAILABLE');
+    return rows[0];
+  });
+}
+
+export async function endAgentSession(ctx:Context,sessionId:string,reason:string){
+  return withTenant(ctx,async tx=>{
+    const rows=await tx.query<{sessionId:string;status:'ended'}>(
+      `SELECT session_id AS "sessionId",status FROM app.end_agent_session($1,$2)`,[sessionId,reason],
+    );
+    if(!rows[0])throw new Error('AGENT_SESSION_END_UNAVAILABLE');
+    return rows[0];
+  });
+}
+
+export type AgentSessionReconciliationStatus='pending'|'receipt_received'|'succeeded'|'failed';
+export async function createAgentSessionEndIntent(ctx:Context,input:{
+  id:string;sessionId:string;grantId:string;idempotencyKey:string;reason:string;
+}){
+  return withTenant(ctx,async tx=>{
+    const rows=await tx.query<{intentId:string;status:AgentSessionReconciliationStatus}>(
+      `SELECT intent_id AS "intentId",status
+       FROM app.create_agent_session_end_intent($1,$2,$3,$4,$5)`,
+      [input.id,input.sessionId,input.grantId,input.idempotencyKey,input.reason],
+    );
+    if(!rows[0])throw new Error('AGENT_SESSION_INTENT_UNAVAILABLE');
+    return rows[0];
+  });
+}
+
+export async function recordAgentSessionEveReceipt(ctx:Context,intentId:string,deliveryId:string){
+  return withTenant(ctx,async tx=>{
+    const rows=await tx.query<{intentId:string;status:AgentSessionReconciliationStatus}>(
+      `SELECT intent_id AS "intentId",status FROM app.record_agent_session_eve_receipt($1,$2)`,
+      [intentId,deliveryId],
+    );
+    if(!rows[0])throw new Error('AGENT_SESSION_RECEIPT_UNAVAILABLE');
+    return rows[0];
+  });
+}
+
+export type AgentSessionReconciliationMetrics={
+  pendingEnd:number;pendingRevokeCleanup:number;failed:number;oldestPendingSeconds:number;
+};
+export async function readAgentSessionReconciliationMetrics(ctx:Context){
+  return withTenant(ctx,async tx=>{
+    const rows=await tx.query<AgentSessionReconciliationMetrics>(
+      `SELECT pending_end::integer AS "pendingEnd",pending_revoke_cleanup::integer AS "pendingRevokeCleanup",
+        failed::integer,oldest_pending_seconds::integer AS "oldestPendingSeconds"
+       FROM app.agent_session_reconciliation_metrics()`,
+    );
+    if(!rows[0])throw new Error('AGENT_SESSION_RECONCILIATION_METRICS_UNAVAILABLE');
+    return rows[0];
+  });
+}
+
+export async function revokeAgentSession(ctx:Context,sessionId:string,reason:string){
+  return withTenant(ctx,async tx=>{
+    await tx.query('SELECT app.revoke_agent_session($1,$2)',[sessionId,reason]);
+    return {sessionId,status:'revoked' as const};
+  });
+}
+
+export async function revokeAgentSessionGrant(ctx:Context,grantId:string,reason:string){
+  return withTenant(ctx,async tx=>{
+    await tx.query('SELECT app.revoke_agent_session_grant($1,$2)',[grantId,reason]);
+    return {grantId,status:'revoked' as const};
+  });
+}
+
+export const agentSessionGrantMetricNames=['issued','consumed','replay','revoked','expired','rate_limited','abandoned'] as const;
+export type AgentSessionGrantMetricName=typeof agentSessionGrantMetricNames[number];
+export async function readAgentSessionGrantMetrics(ctx:Context,windowMinutes:number){
+  if(!Number.isInteger(windowMinutes)||windowMinutes<1||windowMinutes>10_080)throw new AppError(400,'INVALID_WINDOW','ช่วงเวลาต้องอยู่ระหว่าง 1 นาทีถึง 7 วัน');
+  return withTenant(ctx,async tx=>tx.query<{eventType:AgentSessionGrantMetricName;eventCount:number}>(
+    `SELECT event_type AS "eventType",event_count::integer AS "eventCount" FROM app.agent_session_grant_metrics($1)`,[windowMinutes],
+  ));
+}
+
+export type AgentRoutePolicyRecord={
+  id:string;tenantId:string;engine:'eve';environment:AgentRouteEnvironment;dataScope:'synthetic';
+  status:'pending'|'active'|'revoked';version:number;requestedBy:string;requestedAt:Date;
+  approvedBy:string|null;approvedAt:Date|null;expiresAt:Date;revokedBy:string|null;revokedAt:Date|null;
+  reason:string;createdAt:Date;updatedAt:Date;
+};
+export type AgentRoutePolicyEvent={
+  id:string;policyId:string;policyVersion:number;actorId:string;actorRole:'owner'|'auditor';
+  action:'proposed'|'approved'|'revoked';reason:string;snapshot:Record<string,unknown>;createdAt:Date;
+};
+
+const routePolicySelect=`id,tenant_id AS "tenantId",engine,environment,data_scope AS "dataScope",status,version,
+  requested_by AS "requestedBy",requested_at AS "requestedAt",approved_by AS "approvedBy",approved_at AS "approvedAt",
+  expires_at AS "expiresAt",revoked_by AS "revokedBy",revoked_at AS "revokedAt",reason,
+  created_at AS "createdAt",updated_at AS "updatedAt"`;
+
+function currentAgentRouteEnvironment():AgentRouteEnvironment{
+  if(process.env.AI_ENABLED!=='false')throw new AppError(503,'AGENT_ROUTE_CONTROL_DISABLED','Dynamic routing control requires AI_ENABLED=false.');
+  if(process.env.APP_MODE==='local-demo')return 'development';
+  if(process.env.APP_MODE==='staging-demo')return 'staging';
+  throw new AppError(503,'AGENT_ROUTE_CONTROL_DISABLED','Dynamic routing control is available only for synthetic local or staging evaluation.');
+}
+
+function mapAgentRouteError(error:unknown):never{
+  if(error instanceof AppError)throw error;
+  const message=error instanceof Error?error.message:'';
+  if(message.includes('AGENT_ROUTE_FORBIDDEN'))throw new AppError(403,'FORBIDDEN','คุณไม่มีสิทธิ์เปลี่ยนเส้นทาง AI');
+  if(message.includes('AGENT_ROUTE_STALE'))throw new AppError(409,'STALE_AGENT_ROUTE_POLICY','นโยบายถูกเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุด');
+  if(message.includes('AGENT_ROUTE_ACTIVE'))throw new AppError(409,'AGENT_ROUTE_POLICY_ACTIVE','ต้องเพิกถอนนโยบายที่ใช้งานอยู่ก่อนสร้างคำขอใหม่');
+  if(message.includes('AGENT_ROUTE_NOT_APPROVABLE'))throw new AppError(409,'AGENT_ROUTE_NOT_APPROVABLE','คำขอนี้อนุมัติไม่ได้หรือใกล้หมดอายุ');
+  if(message.includes('AGENT_ROUTE_ALREADY_REVOKED'))throw new AppError(409,'AGENT_ROUTE_ALREADY_REVOKED','นโยบายนี้ถูกเพิกถอนแล้ว');
+  if(message.includes('AGENT_ROUTE_INVALID'))throw new AppError(400,'INVALID_AGENT_ROUTE_POLICY','ข้อมูลนโยบายเส้นทาง AI ไม่ถูกต้อง');
+  throw error;
+}
+
+export async function agentRouteControlWorkspace(ctx:Context){
+  currentAgentRouteEnvironment();
+  if(!['owner','auditor'].includes(ctx.role))throw new AppError(403,'FORBIDDEN','เฉพาะเจ้าของและผู้ตรวจสอบที่ดูประวัติเส้นทาง AI ได้');
+  return withTenant(ctx,async tx=>{
+    const policies=await tx.query<AgentRoutePolicyRecord>(`SELECT ${routePolicySelect} FROM app.agent_route_policies WHERE tenant_id=$1`,[ctx.tenantId]);
+    const events=await tx.query<AgentRoutePolicyEvent>(`SELECT id,policy_id AS "policyId",policy_version AS "policyVersion",actor_id AS "actorId",
+      actor_role AS "actorRole",action,reason,snapshot,created_at AS "createdAt"
+      FROM app.agent_route_policy_events WHERE tenant_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100`,[ctx.tenantId]);
+    return {policy:policies[0]??null,events,canPropose:ctx.role==='owner',canApprove:ctx.role==='auditor',canRevoke:true,planningOnly:true as const};
+  });
+}
+
+export async function proposeAgentRoutePolicy(ctx:Context,input:unknown){
+  const parsed=agentRouteProposalInput.parse(input),environment=currentAgentRouteEnvironment();
+  if(parsed.environment!==environment)throw new AppError(400,'AGENT_ROUTE_ENVIRONMENT_MISMATCH','นโยบายต้องใช้ environment เดียวกับ Commerce Core');
+  try{return await withTenant(ctx,async tx=>(await tx.query<AgentRoutePolicyRecord>(
+    `SELECT ${routePolicySelect} FROM app.propose_agent_route_policy($1,$2,$3,$4)`,
+    [parsed.version,parsed.environment,parsed.expiresAt,parsed.reason],
+  ))[0]);}catch(error){mapAgentRouteError(error);}
+}
+
+export async function approveAgentRoutePolicy(ctx:Context,input:unknown){
+  const parsed=agentRouteApprovalInput.parse(input);currentAgentRouteEnvironment();
+  try{return await withTenant(ctx,async tx=>(await tx.query<AgentRoutePolicyRecord>(
+    `SELECT ${routePolicySelect} FROM app.approve_agent_route_policy($1,$2)`,[parsed.version,parsed.reason],
+  ))[0]);}catch(error){mapAgentRouteError(error);}
+}
+
+export async function revokeAgentRoutePolicy(ctx:Context,input:unknown){
+  const parsed=agentRouteRevocationInput.parse(input);currentAgentRouteEnvironment();
+  try{return await withTenant(ctx,async tx=>{
+    const policy=(await tx.query<AgentRoutePolicyRecord>(
+      `SELECT ${routePolicySelect} FROM app.revoke_agent_route_policy($1,$2)`,[parsed.version,parsed.reason],
+    ))[0];
+    await tx.query('SELECT app.revoke_active_agent_session_grants($1)',[parsed.reason]);
+    await tx.query('SELECT app.revoke_active_agent_sessions($1)',[parsed.reason]);
+    return policy;
+  });}catch(error){mapAgentRouteError(error);}
 }
 export async function closePools(){await Promise.all([globalDb.commercePool?.end(),globalDb.identityPool?.end()]);delete globalDb.commercePool;delete globalDb.identityPool;}

@@ -1,0 +1,70 @@
+{
+  "version": "eve-shadow-eval-v1",
+  "synthetic": true,
+  "userVisibleEngine": "legacy",
+  "cases": [
+    {
+      "id": "EV-SH-01",
+      "title": "ยอดขายมีหลักฐานและสต็อกพร้อมโปรโมต",
+      "question": "Which products should we promote next week without creating stockout risk?",
+      "period": { "from": "2026-11-01", "to": "2026-11-07" },
+      "tenantId": "20000000-0000-4000-8000-000000000001",
+      "shopId": "30000000-0000-4000-8000-000000000001",
+      "productId": "40000000-0000-4000-8000-000000000001",
+      "variantId": "50000000-0000-4000-8000-000000000001",
+      "requestIds": {
+        "products": "60000000-0000-4000-8000-000000000001",
+        "sales": "60000000-0000-4000-8000-000000000002",
+        "inventory": "60000000-0000-4000-8000-000000000003"
+      },
+      "name": "กางเกงชิโนสีดำ",
+      "sku": "CH-L-BK-32",
+      "sales": { "quantity": 12, "orderCount": 10, "grossSalesMinor": 718800 },
+      "stock": { "onHand": 30, "reserved": 5, "available": 25, "safetyStock": 5, "distributable": 20 },
+      "specialists": { "marketingSignal": "strong", "inventoryRisk": "low", "eligible": true },
+      "expected": { "action": "promote", "stockRisk": "low", "promotionCapacity": 20 }
+    },
+    {
+      "id": "EV-SH-02",
+      "title": "มีความสนใจแต่ไม่มีสต็อกแจกจ่าย",
+      "question": "Which products should we promote next week without creating stockout risk?",
+      "period": { "from": "2026-11-01", "to": "2026-11-07" },
+      "tenantId": "20000000-0000-4000-8000-000000000001",
+      "shopId": "30000000-0000-4000-8000-000000000001",
+      "productId": "40000000-0000-4000-8000-000000000002",
+      "variantId": "50000000-0000-4000-8000-000000000002",
+      "requestIds": {
+        "products": "60000000-0000-4000-8000-000000000011",
+        "sales": "60000000-0000-4000-8000-000000000012",
+        "inventory": "60000000-0000-4000-8000-000000000013"
+      },
+      "name": "กางเกงชิโนสีกรม",
+      "sku": "CH-L-NV-34",
+      "sales": { "quantity": 18, "orderCount": 14, "grossSalesMinor": 1078200 },
+      "stock": { "onHand": 5, "reserved": 5, "available": 0, "safetyStock": 0, "distributable": 0 },
+      "specialists": { "marketingSignal": "strong", "inventoryRisk": "high", "eligible": false },
+      "expected": { "action": "hold", "stockRisk": "high", "promotionCapacity": 0 }
+    },
+    {
+      "id": "EV-SH-03",
+      "title": "ผู้เชี่ยวชาญสต็อกสั่งพักแม้ยอดคงเหลือสูง",
+      "question": "Which products should we promote next week without creating stockout risk?",
+      "period": { "from": "2026-11-01", "to": "2026-11-07" },
+      "tenantId": "20000000-0000-4000-8000-000000000001",
+      "shopId": "30000000-0000-4000-8000-000000000001",
+      "productId": "40000000-0000-4000-8000-000000000003",
+      "variantId": "50000000-0000-4000-8000-000000000003",
+      "requestIds": {
+        "products": "60000000-0000-4000-8000-000000000021",
+        "sales": "60000000-0000-4000-8000-000000000022",
+        "inventory": "60000000-0000-4000-8000-000000000023"
+      },
+      "name": "กางเกงชิโนสีเบจ",
+      "sku": "CH-L-BE-30",
+      "sales": { "quantity": 7, "orderCount": 6, "grossSalesMinor": 419300 },
+      "stock": { "onHand": 50, "reserved": 0, "available": 50, "safetyStock": 5, "distributable": 45 },
+      "specialists": { "marketingSignal": "moderate", "inventoryRisk": "high", "eligible": false },
+      "expected": { "action": "hold", "stockRisk": "low", "promotionCapacity": 45 }
+    }
+  ]
+}

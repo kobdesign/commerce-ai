@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-11-16",
+  "status": "draft",
+  "scope": "staging-synthetic-only",
+  "executionEnabled": false,
+  "selectedOptions": {
+    "monitoringStack": "hybrid-external-primary-v1",
+    "sloProfile": "strict-internal-canary-v1"
+  },
+  "monitoringOptions": [
+    {
+      "id": "hybrid-external-primary-v1",
+      "label": "Better Stack external probes and on-call + signed alert verification bridge + Vercel Agent Runs + Render notifications",
+      "disposition": "recommended",
+      "components": [
+        "Better Stack probes /api/health and /api/ready from outside Render",
+        "Independent bridge verifies Commerce HMAC before creating a Better Stack incident",
+        "Vercel Agent Runs supplies Eve execution, usage and error trace",
+        "Render health and deploy notifications remain a secondary platform signal"
+      ],
+      "officialReferences": [
+        "https://betterstack.com/docs/uptime/monitoring-start/",
+        "https://betterstack.com/docs/uptime/incoming-webhooks/",
+        "https://betterstack.com/docs/uptime/escalation-policies/",
+        "https://vercel.com/changelog/eve-agent-observability",
+        "https://render.com/docs/health-checks",
+        "https://render.com/docs/notifications"
+      ],
+      "limitations": [
+        "The signed alert verification bridge is not implemented or deployed yet.",
+        "Provider retention, plan and notification cost require approval.",
+        "Agent Runs is diagnostic evidence and is not the external availability probe."
+      ]
+    },
+    {
+      "id": "vercel-observability-primary-v1",
+      "label": "Vercel Observability and Agent Runs as primary",
+      "disposition": "alternative",
+      "components": [
+        "Vercel Agent Runs for Eve execution traces",
+        "Vercel Alerts for Vercel project anomalies",
+        "Render health notifications for Commerce Core"
+      ],
+      "officialReferences": [
+        "https://vercel.com/docs/observability",
+        "https://vercel.com/docs/alerts",
+        "https://vercel.com/changelog/eve-agent-observability",
+        "https://render.com/docs/notifications"
+      ],
+      "limitations": [
+        "It does not independently probe the Render-hosted Commerce Core from outside Render.",
+        "Vercel Alerts currently require eligible plans and focus on Vercel project anomalies.",
+        "A separate on-call/escalation process remains necessary."
+      ]
+    },
+    {
+      "id": "platform-native-only-v1",
+      "label": "Render and Vercel platform-native signals only",
+      "disposition": "insufficient-alone",
+      "components": [
+        "Render health checks and notifications",
+        "Vercel Agent Runs and project observability"
+      ],
+      "officialReferences": [
+        "https://render.com/docs/health-checks",
+        "https://render.com/docs/notifications",
+        "https://vercel.com/changelog/eve-agent-observability"
+      ],
+      "limitations": [
+        "No independent end-to-end availability probe covers both hosting providers.",
+        "No approved cross-provider on-call escalation path.",
+        "It cannot satisfy signed custom canary alert verification by itself."
+      ]
+    }
+  ],
+  "sloProfiles": [
+    {
+      "id": "strict-internal-canary-v1",
+      "label": "Strict internal canary proposal",
+      "classification": "proposal-only",
+      "minimumSampleSize": 20,
+      "applicationAvailabilityPercent": 99,
+      "agentCompletionRatePercent": 95,
+      "maximumFallbackRatePercent": 5,
+      "maximumErrorRatePercent": 2,
+      "acknowledgementTargetMinutes": 15,
+      "escalationTargetMinutes": 30
+    },
+    {
+      "id": "observation-first-canary-v1",
+      "label": "Observation-first internal canary proposal",
+      "classification": "proposal-only",
+      "minimumSampleSize": 10,
+      "applicationAvailabilityPercent": 95,
+      "agentCompletionRatePercent": 90,
+      "maximumFallbackRatePercent": 10,
+      "maximumErrorRatePercent": 5,
+      "acknowledgementTargetMinutes": 30,
+      "escalationTargetMinutes": 60
+    }
+  ],
+  "incidentOwnership": {
+    "primaryOwner": "github:kobdesign",
+    "backupOwner": null,
+    "communicationsOwner": "github:kobdesign"
+  },
+  "window": {
+    "startsAt": null,
+    "endsAt": null,
+    "changeTicket": null
+  },
+  "syntheticTenantId": "11111111-1111-4111-8111-111111111111",
+  "runtimeCapabilities": {
+    "liveTurnsImplemented": true,
+    "commerceMutationsEnabled": false,
+    "productionTenantDataEnabled": false,
+    "codeReference": "apps/agent-runtime/agent/lib/commerce-canary-auth.ts:commerceCanaryAuth"
+  },
+  "requestedCapabilities": {
+    "liveModelCalls": true,
+    "commerceMutations": false,
+    "productionTenantData": false
+  },
+  "abortCriteria": [
+    { "id": "tenant_isolation", "action": "kill-switch-and-fallback", "description": "Any cross-tenant read or tenant-scope mismatch." },
+    { "id": "unauthorized_tool", "action": "kill-switch-and-fallback", "description": "Any tool call outside the approved read-only capability set." },
+    { "id": "evidence_integrity", "action": "kill-switch-and-fallback", "description": "Missing, unverifiable or mismatched evidence reference." },
+    { "id": "mutation_attempt", "action": "kill-switch-and-fallback", "description": "Any financial, inventory, marketplace or external mutation attempt." },
+    { "id": "alert_delivery", "action": "kill-switch-and-fallback", "description": "Signed alert delivery or incident routing cannot be verified." },
+    { "id": "budget", "action": "kill-switch-and-fallback", "description": "Approved per-run or canary-window model budget is reached." },
+    { "id": "incident_ack", "action": "kill-switch-and-fallback", "description": "Primary and backup acknowledgement target is missed." }
+  ],
+  "preflightEvidence": {
+    "approvalRecord": "docs/evidence/eve-canary-bootstrap-approval-2026-11-16.json",
+    "providerRetentionConfirmation": "docs/evidence/eve-canary-provider-retention-2026-11-16.json",
+    "stagingSecretProvisioning": null,
+    "alertDeliveryDryRun": null,
+    "ownerAcknowledgement": null,
+    "rollbackRehearsal": "docs/evidence/eve-canary-incident-rehearsal-latest.json",
+    "liveTurnPolicyTest": "docs/82-eve-live-turn-policy-security-harness.md",
+    "changeTicket": null
+  },
+  "completionEvidenceTemplate": {
+    "routeMetrics": null,
+    "sessionMetrics": null,
+    "costMetrics": null,
+    "incidentTimeline": null,
+    "rollbackResult": null
+  }
+}
