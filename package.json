@@ -42,6 +42,7 @@
     "agent:eval:rollback": "npm run eval:rollback --workspace @commerce/agent-runtime",
     "agent:canary:readiness": "node --import tsx scripts/check-agent-canary-readiness.ts",
     "agent:canary:rehearse": "node --import tsx scripts/rehearse-agent-canary-controls.ts",
+    "agent:alert-bridge:rehearse": "node --import tsx scripts/rehearse-alert-verification-bridge.ts",
     "agent:canary:plan": "node --import tsx scripts/check-agent-canary-staging-plan.ts",
     "agent:budget:check": "node --import tsx scripts/check-agent-ai-gateway-budget.ts",
     "agent:typecheck": "npm run typecheck --workspace @commerce/agent-runtime",

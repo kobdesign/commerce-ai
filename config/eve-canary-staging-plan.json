@@ -28,7 +28,7 @@
         "https://render.com/docs/notifications"
       ],
       "limitations": [
-        "The signed alert verification bridge is not implemented or deployed yet.",
+        "The signed alert verification contract and synthetic rehearsal are implemented; an independently deployed receiver, durable replay store and external delivery evidence are still pending.",
         "Provider retention, plan and notification cost require approval.",
         "Agent Runs is diagnostic evidence and is not the external availability probe."
       ]
