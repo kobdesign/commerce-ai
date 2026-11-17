@@ -12,7 +12,7 @@ change ticket, external evidence หรือ secret แทน provider แล�
 
 - monitoring: `hybrid-external-primary-v1`
 - SLO: `strict-internal-canary-v1`
-- synthetic tenant: `11111111-1111-4111-8111-111111111111`
+- synthetic tenant: `20000000-0000-4000-8000-000000000001`
 - model proposal: `openai/gpt-5.4-mini`
 - per-run proposal: input 5,000 tokens, output 1,000 tokens, USD 0.10
 - monthly canary budget: USD 5 at Vercel project scope; platform sync verified

@@ -36,7 +36,8 @@ describe('Eve canary staging execution gate',()=>{
     expect(result.blockingConditions).toContain('canary_window_not_scheduled');
     expect(result.blockingConditions).not.toContain('readiness:CANARY-MONITORING-SLO');
     expect(result.blockingConditions).not.toContain('preflight_evidence_missing:providerRetentionConfirmation');
-    expect(result.blockingConditions).toContain('preflight_evidence_missing:stagingSecretProvisioning');
+    expect(result.blockingConditions).not.toContain('preflight_evidence_missing:stagingSecretProvisioning');
+    expect(plan.syntheticTenantId).toBe('20000000-0000-4000-8000-000000000001');
     expect(result.selectedOptions).toEqual({monitoringStack:'hybrid-external-primary-v1',sloProfile:'strict-internal-canary-v1'});
     expect(result.runtimeCapabilities).toMatchObject({liveTurnsImplemented:true,commerceMutationsEnabled:false,productionTenantDataEnabled:false});
   });

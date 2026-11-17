@@ -1,6 +1,6 @@
 # EVE-CANARY-13 — Staging Identity and Secret Provisioning
 
-สถานะ: **Partial / configured, awaiting Commerce Core deployment**
+สถานะ: **Complete / verified / fail-closed**
 วันที่: 17 พฤศจิกายน 2026
 
 ## ผลที่ทำแล้ว
@@ -16,6 +16,11 @@
 - เก็บ raw service credential เป็น Secret เฉพาะ Vercel Preview แล้วตาม owner approval
 - ตั้งค่า Commerce Core URL, environment และ synthetic tenant ID ใน Vercel Preview แล้ว
 - Render รับเฉพาะ credential hash, prefix และ expiry และเปิด one-time bootstrap metadata แล้ว
+- PR #19 merge ที่ commit `492a8428deebbe76892bd6713262e08a5bad8965`
+- Render bootstrap deploy `dep-dbu3lh942hec73bg2k10` สร้าง principal สำเร็จ
+- Product, Inventory และ Sales read contract ผ่าน; tenant อื่นถูกปฏิเสธด้วย `403 SHOP_FORBIDDEN`
+- Render bootstrap ถูกปิดและล้าง hash/prefix/expiry แล้ว; cleanup deploy `dep-dbu3mt0u01pc73dj39u0` เป็น `live`
+- ลบ credential และ verification script ชั่วคราวจากเครื่องแล้ว
 
 ## Service credential bootstrap
 
@@ -30,18 +35,16 @@
 
 Integration test ตรวจ create, rerun, scope, tenant/shop, audit event และยืนยันว่า raw credential ไม่ถูกบันทึกในฐานข้อมูลแล้ว ผลรวมทั้ง repository คือ 49 test files / 303 tests และ agent runtime 12 tests ผ่าน พร้อม TypeScript, ESLint และ Eve build บน Node 24 ผ่าน
 
-## เหตุที่ยังไม่ Complete
+## ผลตรวจรับ
 
-Render deploy ที่เกิดจากการตั้ง environment ยังใช้ revision `main` เดิมซึ่งไม่มี bootstrap script จึงยังไม่สร้าง service principal ใน Commerce Core ต้อง merge และ deploy revision นี้ก่อน แล้วจึงทดสอบ read-only Product, Sales, Inventory และ cross-tenant rejection ได้
+principal ผูก tenant `20000000-0000-4000-8000-000000000001`, TikTok shop `30000000-0000-4000-8000-000000000001` และ scope `catalog:read`, `sales:read`, `inventory:read` เท่านั้น การทดสอบหลัง cleanup deploy ยืนยันว่า credential ยังอ่านข้อมูล synthetic ได้และ shop ของ tenant อื่นถูกปฏิเสธ
 
-ไฟล์ credential ชั่วคราวถูกจำกัดสิทธิ์เป็น mode `0600` และจะถูกลบหลังการตรวจสอบสำเร็จ Live AI ยังปิด, Render routing ยังปิด และ staging gate ยังคง `blocked / no-go`
+Live AI ยังปิด, Render routing ยังปิด และ staging gate ยังคง `blocked / no-go` เพราะยังไม่มี alert-delivery dry run, owner acknowledgement, change ticket และ canary window
 
 ## ขั้นต่อไป
 
-1. review และ merge revision ที่มี bootstrap script
-2. รอ Render deploy และตรวจ audit event ของ principal
-3. ทดสอบ Product, Sales และ Inventory read รวม cross-tenant rejection
-4. ล้างค่า bootstrap จาก Render และลบ credential ชั่วคราวหลัง principal ถูกสร้าง
-5. บันทึก metadata-only evidence และผูกหลักฐานเข้ากับ `preflightEvidence.stagingSecretProvisioning`
+1. ทำ external alert-delivery dry run และบันทึกหลักฐาน
+2. บันทึก owner acknowledgement และออก change ticket
+3. กำหนด time-boxed synthetic canary window ก่อนเปลี่ยน execution gate
 
 หลักฐาน machine-readable อยู่ที่ [`docs/evidence/eve-canary-staging-identity-2026-11-16.json`](evidence/eve-canary-staging-identity-2026-11-16.json)
