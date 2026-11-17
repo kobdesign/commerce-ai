@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-11-16",
+  "scope": "read-only-internal-canary",
+  "governance": {
+    "mode": "bootstrap-single-owner",
+    "ownerSubject": "github:kobdesign",
+    "productionAllowed": false,
+    "realTenantDataAllowed": false,
+    "commerceMutationsAllowed": false,
+    "maximumWindowHours": 4,
+    "promotionRequirement": "Move to separated-role governance before real-tenant pilot or production."
+  },
+  "technicalGates": [
+    { "id": "POC-ISOLATION", "status": "verified", "evidence": ["docs/71-eve-cross-tenant-isolation.md"] },
+    { "id": "POC-EVIDENCE", "status": "verified", "evidence": ["docs/72-eve-evidence-backed-recommendation.md"] },
+    { "id": "POC-OBSERVABILITY", "status": "verified", "evidence": ["docs/74-eve-tracing-redaction-cost-attribution.md"] },
+    { "id": "POC-SHADOW", "status": "verified", "evidence": ["docs/75-eve-legacy-shadow-comparison.md"] },
+    { "id": "POC-ROLLBACK", "status": "verified", "evidence": ["docs/76-eve-rollback-rehearsal.md"] },
+    { "id": "CANARY-GRANT-REGISTRY", "status": "verified", "evidence": ["docs/83-eve-one-time-grant-registry.md"] },
+    { "id": "CANARY-GRANT-OPERATIONS", "status": "verified", "evidence": ["docs/84-eve-grant-operations.md"] },
+    { "id": "CANARY-SESSION-ACL", "status": "verified", "evidence": ["docs/85-eve-session-continuation-acl.md"] },
+    { "id": "CANARY-SESSION-LIFECYCLE", "status": "verified", "evidence": ["docs/86-eve-session-lifecycle-reconciliation.md"] },
+    { "id": "CANARY-LIFECYCLE-RECONCILIATION", "status": "verified", "evidence": ["docs/87-eve-durable-lifecycle-reconciliation.md"] },
+    { "id": "CANARY-CLEANUP-IDENTITY-RETENTION", "status": "verified", "evidence": ["docs/88-eve-cleanup-identity-retention.md"] }
+  ],
+  "approvalGates": [
+    {
+      "id": "CANARY-IDENTITY-SECRETS",
+      "status": "approved",
+      "ownerRoles": ["Engineering", "Security/Privacy"],
+      "requiredBefore": "issuing a live-model canary session",
+      "selectedOption": "commerce-ed25519-provider-secret-stores-v1",
+      "controls": {
+        "identityProvider": "Commerce Core short-lived Ed25519 session grants",
+        "secretManager": "Render environment-scoped secrets for Core and Vercel Preview environment variables for Eve",
+        "rotationRehearsal": "docs/88-eve-cleanup-identity-retention.md"
+      },
+      "approvedBy": [{ "subject": "github:kobdesign", "role": "BootstrapOwner" }],
+      "approvedAt": "2026-11-16T06:12:36Z",
+      "evidence": ["docs/evidence/eve-canary-bootstrap-approval-2026-11-16.json"]
+    },
+    {
+      "id": "CANARY-DATA-POLICY",
+      "status": "approved",
+      "ownerRoles": ["Product", "Security/Privacy"],
+      "requiredBefore": "sending reduced Commerce data to a model provider",
+      "selectedOption": "reduced-read-model-zero-content-trace-v1",
+      "controls": {
+        "allowedDataContract": "commerce-agent-read-v1 reduced evidence without customer identity or raw statements",
+        "retentionPolicy": "docs/88-eve-cleanup-identity-retention.md",
+        "providerRetentionMode": "Vercel AI Gateway request-level zero-data-retention and no-training"
+      },
+      "approvedBy": [{ "subject": "github:kobdesign", "role": "BootstrapOwner" }],
+      "approvedAt": "2026-11-16T06:12:36Z",
+      "evidence": [
+        "docs/evidence/eve-canary-bootstrap-approval-2026-11-16.json",
+        "docs/evidence/eve-canary-provider-retention-2026-11-16.json"
+      ]
+    },
+    {
+      "id": "CANARY-MODEL-BUDGET",
+      "status": "approved",
+      "ownerRoles": ["Product", "Finance"],
+      "requiredBefore": "enabling paid model calls",
+      "selectedOption": "gpt-5.4-mini-bounded-canary-v1",
+      "controls": {
+        "modelAllowlist": "openai/gpt-5.4-mini",
+        "monthlyBudgetUsd": 5,
+        "budgetPolicy": "config/eve-ai-gateway-budget.json",
+        "perRunMaxInputTokens": 5000,
+        "perRunMaxOutputTokens": 1000,
+        "perRunMaxCostUsd": 0.1
+      },
+      "approvedBy": [{ "subject": "github:kobdesign", "role": "BootstrapOwner" }],
+      "approvedAt": "2026-11-16T06:12:36Z",
+      "evidence": [
+        "docs/evidence/eve-canary-bootstrap-approval-2026-11-16.json",
+        "docs/evidence/eve-canary-budget-amendment-2026-11-16.json",
+        "docs/evidence/eve-ai-gateway-project-budget-2026-11-16.json"
+      ]
+    },
+    {
+      "id": "CANARY-DYNAMIC-ROUTING",
+      "status": "approved",
+      "ownerRoles": ["Engineering", "Security/Privacy"],
+      "requiredBefore": "routing an internal tenant to Eve",
+      "selectedOption": "core-audited-tenant-opt-in-v1",
+      "controls": {
+        "flagOwner": "github:kobdesign",
+        "auditSink": "Commerce Core tenant audit log",
+        "revocationSloSeconds": 60
+      },
+      "approvedBy": [{ "subject": "github:kobdesign", "role": "BootstrapOwner" }],
+      "approvedAt": "2026-11-16T06:12:36Z",
+      "evidence": ["docs/evidence/eve-canary-bootstrap-approval-2026-11-16.json"]
+    },
+    {
+      "id": "CANARY-MONITORING-SLO",
+      "status": "approved",
+      "ownerRoles": ["Engineering", "Product"],
+      "requiredBefore": "starting a time-bounded canary window",
+      "selectedOption": "hybrid-external-primary-strict-v1",
+      "controls": {
+        "monitorProvider": "Better Stack external probes and on-call, signed verification bridge, Vercel Agent Runs, Render notifications",
+        "availabilitySloPercent": 99,
+        "alertEvidence": "external signed alert delivery evidence pending"
+      },
+      "approvedBy": [{ "subject": "github:kobdesign", "role": "BootstrapOwner" }],
+      "approvedAt": "2026-11-16T06:12:36Z",
+      "evidence": ["docs/evidence/eve-canary-bootstrap-approval-2026-11-16.json"]
+    },
+    {
+      "id": "CANARY-INCIDENT-OWNERSHIP",
+      "status": "approved",
+      "ownerRoles": ["Engineering", "Business Operations"],
+      "requiredBefore": "starting a time-bounded canary window",
+      "selectedOption": "bootstrap-owner-with-automatic-kill-switch-v1",
+      "controls": {
+        "primaryOwner": "github:kobdesign",
+        "backupOwner": null,
+        "communicationsOwner": "github:kobdesign",
+        "runbook": "docs/81-eve-canary-staging-execution-runbook.md",
+        "ackTargetMinutes": 15
+      },
+      "approvedBy": [{ "subject": "github:kobdesign", "role": "BootstrapOwner" }],
+      "approvedAt": "2026-11-16T06:12:36Z",
+      "evidence": ["docs/evidence/eve-canary-bootstrap-approval-2026-11-16.json"]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "profileId": "eve-canary-synthetic-rehearsal-v1",
+  "classification": "engineering-rehearsal-only",
+  "approvalStatus": "not-approved",
+  "scope": "synthetic-tenant-only",
+  "windowSeconds": 300,
+  "requiredConsecutiveBreaches": 2,
+  "requiredConsecutiveRecoveries": 2,
+  "thresholds": {
+    "minimumRouteDecisions": 2,
+    "maximumFallbackRatePercent": 25,
+    "maximumErrorRatePercent": 10,
+    "maximumReportedCostUsd": 0.1,
+    "maximumGrantReplayCount": 1,
+    "maximumGrantRateLimitedCount": 0,
+    "maximumGrantExpiredCount": 0
+  },
+  "slo": {
+    "status": "not-approved",
+    "availabilityPercent": null
+  },
+  "incidentOwnership": {
+    "status": "not-approved",
+    "primaryOwner": null,
+    "backupOwner": null
+  }
+}

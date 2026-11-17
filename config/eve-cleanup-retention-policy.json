@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-11-16",
+  "scope": "staging-synthetic-only",
+  "executionEnabledByDefault": false,
+  "cleanupIdentity": {
+    "issuer": "commerce-core",
+    "audience": "commerce-eve-cleanup",
+    "subject": "commerce-lifecycle-worker",
+    "capability": "cleanup:end",
+    "tokenTtlSeconds": 60,
+    "maximumTokenTtlSeconds": 120,
+    "maximumTrustedPublicKeys": 3,
+    "rotationModel": "current-plus-previous-with-explicit-revocation",
+    "scopeClaims": ["tenantId", "sessionId", "intentId", "environment"]
+  },
+  "workflowRetention": {
+    "eveExperimentalRetention": 0,
+    "requiredWorldSpecVersion": 4,
+    "terminalEvidence": ["session-ended", "stream-expired-or-empty"],
+    "contentTraceAllowed": false
+  },
+  "providerRetention": {
+    "selectedMode": "vercel-ai-gateway-request-level-zdr-and-no-training",
+    "status": "engineering-verified-pending-live-canary-observation",
+    "requiredGate": "CANARY-DATA-POLICY",
+    "evidence": "docs/evidence/eve-canary-provider-retention-2026-11-16.json"
+  },
+  "productionSecrets": {
+    "status": "not-configured",
+    "requiredGate": "CANARY-IDENTITY-SECRETS"
+  }
+}

@@ -3,6 +3,27 @@ on: [push, pull_request]
 permissions:
   contents: read
 jobs:
+  agent-runtime:
+    runs-on: ubuntu-latest
+    env:
+      COMMERCE_AGENT_ENV: local
+      COMMERCE_AGENT_LIVE_AI: 'false'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run agent:test
+      - run: npm run agent:eval:shadow
+      - run: npm run agent:eval:rollback
+      - run: npm run agent:canary:readiness
+      - run: npm run agent:budget:check
+      - run: npm run agent:canary:plan -- --expect-blocked
+      - run: npm run agent:typecheck
+      - run: npm run agent:build:local
+
   checks:
     runs-on: ubuntu-latest
     services:

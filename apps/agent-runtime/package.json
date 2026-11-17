@@ -1,0 +1,35 @@
+{
+  "name": "@commerce/agent-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "info": "COMMERCE_AGENT_ENV=local COMMERCE_AGENT_LIVE_AI=false eve info --json",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "eval:shadow": "node --import tsx scripts/run-shadow-evaluation.ts",
+    "eval:rollback": "node --import tsx scripts/run-rollback-rehearsal.ts",
+    "typecheck": "tsc --noEmit",
+    "check:environment": "node scripts/check-environment.mjs",
+    "build": "npm run check:environment && eve build --profile .eve/build-profiles/current.json",
+    "build:local": "COMMERCE_AGENT_ENV=local COMMERCE_AGENT_LIVE_AI=false npm run build",
+    "start": "npm run check:environment && eve start --no-schedules"
+  },
+  "dependencies": {
+    "@commerce/agent-contracts": "0.1.0",
+    "@commerce/agent-evidence": "0.1.0",
+    "@commerce/agent-routing": "0.1.0",
+    "@commerce/agent-session-auth": "0.1.0",
+    "@commerce/commerce-agent-client": "0.1.0",
+    "ai": "7.0.137",
+    "eve": "1.0.0-rc.10",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.0",
+    "tsx": "4.23.13",
+    "typescript": "6.0.3"
+  }
+}

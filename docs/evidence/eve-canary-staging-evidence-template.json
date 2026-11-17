@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "scope": "staging-synthetic-only",
+  "window": { "startsAt": null, "endsAt": null, "changeTicket": null },
+  "approvedOptions": { "monitoringStack": null, "sloProfile": null },
+  "owners": { "primary": null, "backup": null, "communications": null },
+  "preflight": {
+    "approvalRecord": null,
+    "providerRetentionConfirmation": null,
+    "stagingSecretProvisioning": null,
+    "readinessGateReport": null,
+    "alertDeliveryDryRun": null,
+    "ownerAcknowledgement": null,
+    "rollbackRehearsal": null,
+    "liveTurnPolicyTest": null,
+    "changeTicket": null
+  },
+  "observations": {
+    "routeMetrics": null,
+    "sessionMetrics": null,
+    "fallbackMetrics": null,
+    "errorMetrics": null,
+    "costMetrics": null,
+    "contentCaptured": false
+  },
+  "incident": {
+    "triggered": null,
+    "firstAlertAt": null,
+    "acknowledgedAt": null,
+    "acknowledgedBy": null,
+    "killSwitchAt": null,
+    "legacyFallbackVerifiedAt": null,
+    "recoveredAt": null
+  },
+  "safety": {
+    "crossTenantReads": null,
+    "mutationAttempts": null,
+    "marketplaceWrites": null,
+    "productionTenantDataUsed": null
+  },
+  "decision": { "result": null, "reason": null, "approvedBy": [] }
+}

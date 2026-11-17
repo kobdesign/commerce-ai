@@ -1,8 +1,8 @@
-# แผนโครงการ Agentic Commerce — revision 2
+# แผนโครงการ Agentic Commerce — revision 3
 
-วันที่: 24 กันยายน 2026 · Change records: SC-2026-09-17-01, SC-2026-09-24-01
+วันที่: 13 พฤศจิกายน 2026 · Change records: SC-2026-09-17-01, SC-2026-09-24-01, SC-2026-11-13-01
 
-สถานะ: ปรับแผนตามคำขอผู้ใช้แล้ว เป็น development direction ไม่ใช่การตรวจรับ production หรือคำมั่นกำหนดส่ง การเพิ่มความสามารถต้องผ่านเกณฑ์ของแต่ละช่วง; การปรับแผนครั้งนี้ไม่เปลี่ยน runtime ไม่เปิด external actions และไม่ merge เข้า main
+สถานะ: อนุมัติ architecture direction ให้ eve Agent Runtime deploy แยกบน Vercel และคง Commerce Core บน Render การอนุมัตินี้ยังไม่ติดตั้ง package, เปลี่ยน runtime, เปิด external actions หรือ deploy; implementation ต้องเริ่มจาก POC และผ่านเกณฑ์ใน [docs/65](65-eve-vercel-agent-runtime-decision.md)
 
 ## 1. เป้าหมายและขอบเขตการเปลี่ยน
 
@@ -43,6 +43,7 @@
 | ACP/AP2/MCP | เก็บเป็น adapters ที่ต้องตรวจความเข้ากันได้ | Stage D/E; ไม่สัญญาการเข้าถึงลูกค้าหรือ merchant program |
 | `confirm: true`, rollback ทุก write | ปรับ | Approval record ที่ตรวจโดย server; แยก compensating action จาก rollback |
 | เพิ่มทุกตารางใน migration เดียว | ไม่ใช้ | Expand → backfill/verify → contract ทีหลัง แบ่งตาม workflow |
+| ใช้ eve Marketing Team template เป็น AI runtime หลัก | ใช้เป็น framework/pattern ไม่ copy ทั้ง template | แยก eve บน Vercel, ใช้ bounded Core APIs และคง security/business source of truth เดิม; ดู ADR-014 |
 | เพิ่ม Shopify ทันที | เลื่อน | ยังไม่มีร้านนำร่องยืนยันความต้องการ |
 | Semantic search/vector DB ตั้งแต่แรก | เลื่อน implementation | ทดสอบความต้องการค้นจริงก่อน; keyword/structured filters ยังใช้ต่อ |
 | Roadmap 12 เดือน, Phase 0 6–8 สัปดาห์, market/KPI figures | ใช้เป็นสมมติฐานสำหรับประเมิน | ไม่ใช่ deadline หรือผลลัพธ์ที่ยืนยัน; ประเมินหลังทราบทีม/ข้อมูล/API |
@@ -61,6 +62,8 @@ Priority P0 = งานรอบถัดไป/ตัวกั้น pilot ไ�
 
 Cross-cutting: tenancy, observability, cost controls, UX, tests และ security ทำในทุก stage ไม่เลื่อนไปท้ายโครงการ การเปิด Stage B ให้ร้านนำร่องไม่ต้องรอ C/D/E
 
+**AI runtime track:** ก่อนขยาย Stage B/C เป็นหลาย agent ให้ทำ EVE-POC-01–11 บน Vercel ด้วย synthetic read-only data POC ไม่เป็น dependency ของงาน Commerce Core ที่ทำเสร็จแล้ว และไม่อนุญาต mutation, production account หรือ direct database access ปัจจุบัน EVE-POC-01–11 และ technical gates 11/11 ผ่านแล้ว Runtime foundation และ Commerce Lead ใช้ reduced Core reads; BootstrapOwner อนุมัติ policy gates 6/6 ตาม [approval preflight](89-eve-canary-approval-closure-preflight.md) แต่ staging execution ยังคง BLOCKED จนมี provider-retention confirmation, staging secrets, external signed-alert evidence และ change window ระบบยังปิด Live AI, mutation และ real-tenant data โดยค่าเริ่มต้น ดู [eve runtime decision](65-eve-vercel-agent-runtime-decision.md), [runtime foundation](67-eve-vercel-runtime-foundation.md), [decision pack](80-eve-canary-approval-decision-pack.md) และ [staging runbook](81-eve-canary-staging-execution-runbook.md)
+
 อัปเดต UX ตามคำขอผู้ใช้ 2026-10-18: ให้ผู้ค้าชาวไทยที่ไม่เคยใช้ระบบเลือกงานจากภาษาธุรกิจและคำแนะนำทีละขั้น โดยคงความสามารถ สิทธิ์ และการยืนยันเดิม เริ่มหน้าแรก/เมนู (UX-MER-01) แล้วปรับเพิ่มสินค้า นำเข้า และการเงินก่อนตรวจรับกับผู้ค้าจริง ดู [แผน UX-MER-01–05](56-merchant-first-ux.md) การปรับหน้าจอไม่ใช่หลักฐานว่า pilot หรือ live integrations พร้อมแล้ว
 
 **Stage C progress:** Product/SKU lifecycle, listing mapping, stock/reservation, internal orders, integration core และ machine ingress identity/lifecycle ส่งมอบใน local แล้วตาม [docs/46](46-product-and-sku-lifecycle.md)–[docs/55](55-service-credential-rotation.md) TikTok seller OAuth foundation และ encrypted per-tenant/shop token vault ส่งมอบใน [docs/63](63-tiktok-shop-seller-authorization.md) โดยยังไม่อ่าน Order API หรือแตะ business state งานถัดไปคือยืนยัน Get Authorized Shops และ Order shadow กับ Development Shop จริง จากนั้นจึงต่อ provider webhook; partial return/refund และ stock write ยังรอ DEC-06/UAT
@@ -69,7 +72,7 @@ Cross-cutting: tenancy, observability, cost controls, UX, tests และ securi
 
 ## 5. ขอบเขตและข้อจำกัดที่เก็บไว้
 
-- ใช้ stack เดิมและ npm workspaces; ยังไม่เพิ่ม Kafka, microservices หรือ vector database จาก vision เพียงอย่างเดียว แผนนี้ไม่เปลี่ยนผู้ให้บริการ hosting
+- ใช้ stack เดิมและ npm workspaces; ยังไม่เพิ่ม Kafka หรือ vector database จาก vision เพียงอย่างเดียว Commerce Web/Core/DB/Worker คงบน Render ส่วน target eve Agent Runtime แยกบน Vercel ตาม ADR-014
 - Physical products ขายเป็นจำนวนเต็ม, THB, สินค้ามี/ไม่มีตัวเลือก; เสื้อผ้าและหมวดอื่นใช้ core เดียวกัน
 - Stage C เตรียม locations แต่เริ่มคลังเดียว; ไม่เปิด BOM/kit components, lot/expiry/serial, fractional units, subscriptions หรือ multi-currency โดยปริยาย
 - ข้อมูล stock quantity แยกจาก inventory valuation; cost history ปัจจุบันไม่ใช่ FIFO/ถัวเฉลี่ยและไม่อ้างเป็นมูลค่าสต็อกทางบัญชี

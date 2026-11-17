@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "evidenceId": "EVE-CANARY-STAGING-IDENTITY-20261116-01",
+  "recordedAt": "2026-11-17T10:37:40Z",
+  "status": "partial-awaiting-commerce-core-deployment",
+  "scope": "staging-synthetic-read-only",
+  "targets": {
+    "vercelProjectId": "prj_UOyEimal3Gvf7pVOhdA8xWT0PhLC",
+    "vercelProjectName": "commerce-ai-agent-poc",
+    "vercelEnvironment": "preview",
+    "renderServiceId": "srv-dbaqrde1egvs73bpc5tg",
+    "renderServiceName": "commerce-ai-staging-web",
+    "failClosedDeployId": "dep-dbte1mb0pb7s73ajbj00",
+    "bootstrapMetadataDeployId": "dep-dbu2st3m8hqs73dv7f60"
+  },
+  "verifiedControls": {
+    "sessionKeyId": "commerce-agent-staging-20261116-1",
+    "renderPrivateSigningKeyConfigured": true,
+    "vercelPublicVerificationKeyConfigured": true,
+    "privateSigningKeySentToVercel": false,
+    "databaseCredentialSentToVercel": false,
+    "marketplaceCredentialSentToVercel": false,
+    "directModelProviderKeyConfigured": false,
+    "liveAiEnabled": false,
+    "renderEveRouteEnabled": false,
+    "renderKillSwitchEnabled": true,
+    "renderDynamicRoutingEnabled": false,
+    "temporaryLocalSecretFilesRemoved": false
+  },
+  "serviceCredential": {
+    "configuredInVercelPreview": true,
+    "configuredInCommerceCore": false,
+    "rawCredentialRetainedLocally": true,
+    "reason": "The raw credential is retained only in a mode-0600 temporary file until the Commerce Core revision is deployed and read/cross-tenant verification completes. Render stores only the SHA-256 hash, prefix, and expiry."
+  },
+  "implementation": {
+    "bootstrapScript": "scripts/provision-agent-staging-principal.ts",
+    "startupIntegration": "scripts/render-start.mjs",
+    "bootstrapBehavior": "Render receives only a SHA-256 hash and prefix; the raw credential is intended for Vercel Preview only; Core creates the principal through app.create_service_principal with an audit event.",
+    "deployed": false
+  },
+  "verification": {
+    "integrationTestFilesPassed": 49,
+    "integrationTestsPassed": 303,
+    "agentRuntimeTestsPassed": 12,
+    "typecheck": "passed",
+    "lint": "passed",
+    "eveBuildNode24": "passed",
+    "renderHealth": "passed-after-final-fail-closed-redeploy",
+    "negativeCrossTenantCoverage": "existing agent isolation suites plus tenant/shop-scoped principal test"
+  },
+  "decision": {
+    "preflightComplete": false,
+    "stagingPlanEvidenceLinked": false,
+    "liveCanaryAllowed": false,
+    "nextRequiredAction": "Merge and deploy the revision containing the staging principal bootstrap, then verify scoped reads and cross-tenant rejection before clearing bootstrap metadata and the temporary credential file."
+  }
+}

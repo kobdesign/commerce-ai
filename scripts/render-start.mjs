@@ -16,10 +16,17 @@ const roleUrls={
 const startupEnv={...process.env,...roleUrls};
 
 await run(['--import','tsx','scripts/migrate.ts'],startupEnv);
-if(service==='web')await run(['--import','tsx','scripts/seed.ts'],startupEnv);
+if(service==='web'){
+  await run(['--import','tsx','scripts/seed.ts'],startupEnv);
+  await run(['--import','tsx','scripts/provision-agent-staging-principal.ts'],startupEnv);
+}
 
 const runtimeEnv={...startupEnv};
-const startupOnly=['ADMIN_DATABASE_URL','COMMERCE_APP_DB_PASSWORD','COMMERCE_IDENTITY_DB_PASSWORD','COMMERCE_QUEUE_DB_PASSWORD','STAGING_DEMO_PASSWORD'];
+const startupOnly=[
+  'ADMIN_DATABASE_URL','COMMERCE_APP_DB_PASSWORD','COMMERCE_IDENTITY_DB_PASSWORD','COMMERCE_QUEUE_DB_PASSWORD','STAGING_DEMO_PASSWORD',
+  'COMMERCE_AGENT_STAGING_PRINCIPAL_BOOTSTRAP','COMMERCE_AGENT_STAGING_CREDENTIAL_HASH','COMMERCE_AGENT_STAGING_CREDENTIAL_PREFIX',
+  'COMMERCE_AGENT_STAGING_CREDENTIAL_EXPIRES_AT',
+];
 for(const key of startupOnly){delete runtimeEnv[key];delete startupEnv[key];delete process.env[key];}
 if(service==='web')delete runtimeEnv.QUEUE_DATABASE_URL;
 else delete runtimeEnv.IDENTITY_DATABASE_URL;

@@ -1,0 +1,10 @@
+{
+  "name": "@commerce/commerce-agent-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@commerce/agent-contracts": "0.1.0"
+  }
+}

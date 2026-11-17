@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "evidenceId": "EVE-AI-GATEWAY-BUDGET-20261116-01",
+  "verifiedAt": "2026-11-16T06:31:46Z",
+  "status": "platform-applied",
+  "provider": "vercel-ai-gateway",
+  "cliVersion": "65.16.0",
+  "target": {
+    "ownerScope": "abhisak-c",
+    "projectId": "prj_UOyEimal3Gvf7pVOhdA8xWT0PhLC",
+    "projectName": "commerce-ai-agent-poc",
+    "rootDirectory": "apps/agent-runtime",
+    "nodeVersion": "24.x"
+  },
+  "budget": {
+    "scopeType": "project",
+    "limitAmountUsd": 5,
+    "currentSpendUsd": 0,
+    "currentByokSpendUsd": 0,
+    "includeByokInQuota": false,
+    "refreshPeriod": "monthly",
+    "active": true,
+    "archived": false
+  },
+  "verification": {
+    "applyResultMatchedConfiguration": true,
+    "independentInspectMatched": true,
+    "liveModelCallsDuringChange": 0
+  },
+  "limitations": [
+    "The request that crosses the budget can complete, so the cap can be exceeded by that final request.",
+    "The project budget applies to AI Gateway requests attributed through this project's Vercel OIDC identity.",
+    "BYOK spend is excluded; BYOK remains disabled by Commerce canary policy.",
+    "This budget does not enable live AI, production, real-tenant data or Commerce mutations."
+  ]
+}

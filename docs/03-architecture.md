@@ -1,6 +1,6 @@
 # Architecture baseline และ decisions
 
-อัปเดต 2026-09-24: ADR-001–006 คงเป็นฐาน; ADR-007–012 เป็น target decisions ตาม [แผน Agentic Commerce](29-agentic-commerce-project-plan.md) ยังไม่ใช่ implementation ที่เปิดใช้ทั้งหมด การออกแบบนี้เพิ่ม modules ใน repo เดิมและไม่เปลี่ยน stack/hosting โดยปริยาย
+อัปเดต 2026-11-15: ADR-001–013 คงเป็นฐาน; ADR-014 ใช้ eve เป็น AI agent runtime แยกบน Vercel ขณะที่ Commerce Core และข้อมูลหลักอยู่ Render ตาม [decision record](65-eve-vercel-agent-runtime-decision.md) EVE-POC-01–11 ผ่านในขอบเขต non-production: มี reduced read contracts/service authentication/Commerce Lead, [Core-signed cross-tenant isolation](71-eve-cross-tenant-isolation.md), [evidence-backed recommendation](72-eve-evidence-backed-recommendation.md), [durable idempotent Core reads](73-eve-durability-and-idempotency.md), [metadata-only trace/cost attribution](74-eve-tracing-redaction-cost-attribution.md), [synthetic shadow comparison](75-eve-legacy-shadow-comparison.md) และ [rollback rehearsal](76-eve-rollback-rehearsal.md) แล้ว โดยยังปิด live AI, production credential และ session continuation
 
 ## ADR-001 — Modular monolith + workers
 
@@ -206,6 +206,29 @@ flowchart TD
 - Provider recommendation และ owner approval อยู่ใน machine-readable manifest; approved status ต้องมีผู้อนุมัติและ evidence
 - Approval ของ provider ไม่ข้าม implementation, migration, security, UAT หรือ production preflight gates
 - ค่า retention/RPO/RTO/budget เป็น policy version ที่ audit ได้ ไม่ฝังเป็นความจริงถาวรใน prompt หรือ provider dashboard เพียงแห่งเดียว
+
+## ADR-014 — eve orchestration แยกบน Vercel; Commerce Core คงบน Render
+
+สถานะ: approved architecture direction วันที่ 13 พฤศจิกายน 2026; EVE-POC-01–11 ผ่านในขอบเขต Preview/synthetic โดยยังไม่เปิด live AI, production credential หรือ existing-session continuation
+
+- ใช้ eve เป็น target runtime สำหรับ Commerce Lead, Marketing Team, Inventory Team, delegation, durable execution และ human interaction
+- source อยู่ใน monorepo เดิมและใช้ shared contracts แต่ deploy เป็น Vercel service แยกจาก Commerce Web/Worker บน Render
+- PostgreSQL inventory/finance, tenant model, RBAC, RLS, outbox และ business rules ไม่ย้ายและไม่ให้ eve เชื่อมตรง
+- eve เรียก bounded Commerce APIs ด้วย server-verified tenant/shop/service identity; Core ตรวจ authorization และ policy ซ้ำทุกคำขอ
+- `@commerce/agent-contracts` กำหนด Product/Sales/Inventory v1 query/result/evidence/error semantics โดยไม่รับ tenant ID จาก model input
+- `@commerce/agent-api` ตรวจ HMAC signed request, environment/audience/timestamp และสร้าง trusted context จาก database authorization; Product/Sales/Inventory handlers ใช้ receipt-bound reduced read models ตาม EVE-POC-05
+- `@commerce/agent-evidence` ใช้ hash contract ร่วมกับ Core เพื่อตรวจ exact evidence set, source version, scope, snapshot และ resolve recommendation reference เป็น source request/data version ตาม EVE-POC-07
+- Commerce Lead มอบหมาย Marketing/Inventory specialists ผ่าน authored eve workflow แล้ว revalidate candidate กับ Core ก่อน deterministic consolidation; specialist ไม่มี mutation tool
+- Commerce Core ออก Ed25519 create grant อายุสั้นหลังตรวจ user/tenant/shop ผ่าน RLS; EVE มีเฉพาะ public key, pin initiator scope และไม่รับ tenant/shop จาก prompt
+- Core บันทึก exact signed claims ใน tenant-scoped grant registry; eve ต้องส่ง grant กลับมาให้ Core consume แบบ atomic ก่อนเรียก model และการ revoke route จะยกเลิก active grants ของ route นั้นใน transaction เดียวกัน
+- Grant operations ใช้ shared PostgreSQL rate limit, metadata-only tenant telemetry, fixed bounded retention และ worker cleanup; Owner/Auditor อ่าน metrics ได้โดยไม่เห็น signed token หรือ prompt
+- create grant ใช้กับ session เดิมหรือ stream ไม่ได้; ก่อนเปิด continuation ต้องมี Core-owned session registry/proxy และ per-session ACL เพราะ eve route auth ไม่ทำ access list ให้แอปอัตโนมัติ
+- eve approval ไม่แทน Core Approval API; mutation ทุกชนิดใช้ proposal, evidence/policy version, human confirmation และ idempotent Core command
+- เริ่มด้วย synthetic read-only POC, shadow และ canary ตามลำดับ คง ToolLoopAgent เดิมเพื่อ rollback
+- แยก runtime ช่วยให้ใช้ managed Workflow/Sandbox/Agent Runs ของ Vercel โดยไม่บังคับ Render Web เปลี่ยนจาก Node 22 เป็น Node 24
+- Vercel/Render cross-cloud latency, data residency, retention, egress, service auth, cost และ incident ownership ต้องผ่าน gate ก่อน production
+
+รายละเอียด boundary, package target, POC acceptance และ rollback อยู่ใน [docs/65](65-eve-vercel-agent-runtime-decision.md)
 
 ## Sources ที่ใช้ประกอบ baseline
 

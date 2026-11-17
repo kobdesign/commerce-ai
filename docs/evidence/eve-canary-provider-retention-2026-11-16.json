@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "evidenceId": "EVE-CANARY-PROVIDER-RETENTION-20261116-01",
+  "scope": "staging-synthetic-read-only",
+  "verifiedAt": "2026-11-16T06:19:39Z",
+  "status": "engineering-verified-for-preflight",
+  "model": {
+    "id": "openai/gpt-5.4-mini",
+    "catalogZeroDataRetention": "all",
+    "catalogNoTraining": "all",
+    "contextWindowTokens": 400000,
+    "maximumOutputTokens": 128000
+  },
+  "eligibleEndpoints": [
+    {
+      "provider": "azure",
+      "hasZeroDataRetention": true,
+      "hasNoTraining": true,
+      "status": 0
+    },
+    {
+      "provider": "openai",
+      "hasZeroDataRetention": true,
+      "hasNoTraining": true,
+      "status": 0
+    }
+  ],
+  "requestEnforcement": {
+    "provider": "vercel-ai-gateway",
+    "zeroDataRetention": true,
+    "disallowPromptTraining": true,
+    "appliesTo": [
+      "commerce-lead",
+      "marketing-analysis",
+      "inventory-analysis"
+    ],
+    "codeReferences": [
+      "apps/agent-runtime/agent/lib/canary-policy-constants.ts",
+      "apps/agent-runtime/agent/agent.ts",
+      "apps/agent-runtime/agent/subagents/marketing-analysis/agent.ts",
+      "apps/agent-runtime/agent/subagents/inventory-analysis/agent.ts",
+      "apps/agent-runtime/tests/gateway-provider-policy.test.ts"
+    ]
+  },
+  "authentication": {
+    "selectedMode": "vercel-project-oidc",
+    "providerApiKeysInAgentRuntime": false,
+    "byokEnabled": false
+  },
+  "verification": {
+    "agentPolicyTests": "passed",
+    "agentTypecheck": "passed",
+    "fullIntegrationSuite": "299/299 passed",
+    "eveNode24Build": "passed",
+    "compiledBundleContainsBothGatewayControls": true,
+    "liveModelCalls": 0
+  },
+  "sources": [
+    {
+      "url": "https://ai-gateway.vercel.sh/v1/models",
+      "sha256": "031a77e1164512e92756ddd673dbaf06a566ff4fb4120431871ccf1fd2598468"
+    },
+    {
+      "url": "https://ai-gateway.vercel.sh/v1/models/openai/gpt-5.4-mini/endpoints",
+      "sha256": "9a7b1af9b2d7eef2368aed0365cd4dc86ae3cd28660938c8f9124f3632f5c8ed"
+    },
+    {
+      "url": "https://vercel.com/blog/zdr-on-ai-gateway"
+    },
+    {
+      "url": "https://vercel.com/docs/ai-gateway/authentication-and-byok"
+    }
+  ],
+  "limitations": [
+    "The public model catalog and endpoint capabilities are time-sensitive and must be checked again immediately before the canary window.",
+    "No paid model request was made while producing this evidence, so Gateway routing metadata has not yet been observed from a live canary response.",
+    "The Vercel project plan or purchased Gateway credits must be eligible for request-level ZDR before execution.",
+    "The Preview deployment and Commerce read credential remain separate operational preflight items; the project budget is evidenced separately.",
+    "This evidence does not authorize production, real-tenant data, Commerce mutations, marketplace writes or external publishing."
+  ]
+}

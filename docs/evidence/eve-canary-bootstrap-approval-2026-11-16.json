@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "approvalId": "EVE-CANARY-BOOTSTRAP-20261116-01",
+  "scope": "staging-synthetic-read-only",
+  "subject": "github:kobdesign",
+  "role": "BootstrapOwner",
+  "confirmedAt": "2026-11-16T06:12:36Z",
+  "source": "direct-owner-confirmation-in-project-session",
+  "confirmation": "ยืนยันตามนี้เลยครับ",
+  "proposalSnapshot": {
+    "readinessManifestSha256": "bd7ba668a937fdd8052721094f2f8ebe18e2ea862c1acc50eaea06430c08c5b3",
+    "stagingPlanSha256": "f8aa10acfc78c6e10d2f22305661fc23111ebed7973ba4ca6f6bc4eba82a091c"
+  },
+  "approvedGateIds": [
+    "CANARY-IDENTITY-SECRETS",
+    "CANARY-DATA-POLICY",
+    "CANARY-MODEL-BUDGET",
+    "CANARY-DYNAMIC-ROUTING",
+    "CANARY-MONITORING-SLO",
+    "CANARY-INCIDENT-OWNERSHIP"
+  ],
+  "approvedParameters": {
+    "model": "openai/gpt-5.4-mini",
+    "perRunMaxInputTokens": 5000,
+    "perRunMaxOutputTokens": 1000,
+    "perRunMaxCostUsd": 0.1,
+    "monthlyBudgetUsd": 20,
+    "monitoringStack": "hybrid-external-primary-v1",
+    "sloProfile": "strict-internal-canary-v1",
+    "maximumWindowHours": 4
+  },
+  "restrictions": {
+    "productionAllowed": false,
+    "realTenantDataAllowed": false,
+    "commerceMutationsAllowed": false,
+    "marketplaceWritesAllowed": false,
+    "externalPublishingAllowed": false
+  },
+  "limitations": [
+    "The confirmation is a bootstrap owner record and is not an external identity-provider attestation.",
+    "Provider retention confirmation, staging secret provisioning, signed external alert delivery, owner window acknowledgement and a change window remain separate preflight requirements.",
+    "Separated-role governance is required before a real-tenant pilot or production."
+  ]
+}
