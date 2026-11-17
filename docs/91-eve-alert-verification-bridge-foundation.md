@@ -35,7 +35,7 @@ Rehearsal ใช้ replay store ใน memory จึงมีไว้ตรว
 
 ## งานถัดไป
 
-1. เลือกปลายทาง deploy receiver และ durable replay store แยกจาก Commerce Core/Eve runtime
+1. ~~เลือกปลายทาง deploy receiver และ durable replay store แยกจาก Commerce Core/Eve runtime~~ ส่งมอบ engineering runtime แล้วใน [EVE-CANARY-15](92-eve-alert-receiver-runtime.md)
 2. เก็บ signing secret ใน provider secret store และห้ามส่ง secret ให้ incident provider
 3. ส่ง synthetic metadata-only breach/recovery ผ่าน network จริง
 4. ตรวจ event ID, delivery timestamp, signature result, provider incident ID และการ acknowledge ของ `github:kobdesign`
