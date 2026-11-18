@@ -3,6 +3,19 @@ on: [push, pull_request]
 permissions:
   contents: read
 jobs:
+  alert-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run alert-bridge:typecheck
+      - run: npx vitest run tests/alert-bridge-runtime.test.ts tests/alert-verification.test.ts
+      - run: npm run alert-bridge:build
+
   agent-runtime:
     runs-on: ubuntu-latest
     env:
