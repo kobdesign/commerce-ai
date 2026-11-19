@@ -1,10 +1,10 @@
 'use client';
 import Link from 'next/link';
 import { useEffect,useRef,useState,type Ref } from 'react';
-import { useRouter } from 'next/navigation';
-import { ArrowRight,BarChart3,Boxes,Landmark,Search,ShieldCheck,Sparkles } from 'lucide-react';
+import { ArrowRight,BarChart3,Boxes,Landmark,Megaphone,PackageSearch,Search,ShieldCheck,Sparkles,UsersRound } from 'lucide-react';
 import { request } from '../lib/client';
 import type { AiRun,catalogEvidence } from '@commerce/ai';
+import type {AgentWorkspaceState} from '../lib/agent-workspace';
 
 type Evidence=Awaited<ReturnType<typeof catalogEvidence>>;
 type Output={id:string;text:string;mode:string;evidence:Evidence};
@@ -12,14 +12,17 @@ type SerializedRun=Omit<AiRun,'created_at'>&{created_at:string};
 const suggestions=['สินค้ามีกี่หมวดและหมวดอะไรบ้าง','ยกตัวอย่าง SKU พร้อมหมวดสินค้า','สรุปความหลากหลายของสินค้าในร้าน'];
 const date=(value:string)=>new Intl.DateTimeFormat('th-TH',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Bangkok'}).format(new Date(value));
 
-export function AiWorkspace({tenantId,shopId,shopName,liveEnabled,initialRuns}:{tenantId:string;shopId:string;shopName:string;liveEnabled:boolean;initialRuns:SerializedRun[]}){
- const [question,setQuestion]=useState(suggestions[0]),[activeMode,setActiveMode]=useState<'tool-preview'|'live'|null>(null),[error,setError]=useState(''),[output,setOutput]=useState<Output|null>(null);
- const router=useRouter(),errorRef=useRef<HTMLParagraphElement>(null),resultRef=useRef<HTMLElement>(null),busy=activeMode!==null;
+export function AiWorkspace({tenantId,shopId,shopName,liveEnabled,agentTeam,initialRuns}:{tenantId:string;shopId:string;shopName:string;liveEnabled:boolean;agentTeam:AgentWorkspaceState;initialRuns:SerializedRun[]}){
+ const [question,setQuestion]=useState(suggestions[0]),[activeMode,setActiveMode]=useState<'tool-preview'|'live'|null>(null),[error,setError]=useState(''),[output,setOutput]=useState<Output|null>(null),[historyRuns,setHistoryRuns]=useState(initialRuns);
+ const errorRef=useRef<HTMLParagraphElement>(null),resultRef=useRef<HTMLElement>(null),busy=activeMode!==null;
  useEffect(()=>{if(error)errorRef.current?.focus();},[error]);
  useEffect(()=>{if(output)resultRef.current?.focus();},[output]);
  async function run(mode:'tool-preview'|'live'){
-  setActiveMode(mode);setError('');setOutput(null);
-  try{setOutput(await request(`/api/tenants/${tenantId}/ai`,{shopId,question:mode==='tool-preview'?'ตรวจรายการสินค้าในร้านที่เลือก':question,mode}));router.refresh();}
+ setActiveMode(mode);setError('');setOutput(null);
+  try{
+   const result:Output=await request(`/api/tenants/${tenantId}/ai`,{shopId,question:mode==='tool-preview'?'ตรวจรายการสินค้าในร้านที่เลือก':question,mode});
+   setOutput(result);setHistoryRuns(current=>[{id:result.id,mode:result.mode,status:'succeeded',model:null,created_at:new Date().toISOString(),input_tokens:null,output_tokens:null,estimated_cost_usd_micros:null,result:{text:result.text,evidence:result.evidence}},...current.filter(item=>item.id!==result.id)].slice(0,10));
+  }
   catch(cause){setError(cause instanceof Error?cause.message:'ตรวจข้อมูลไม่สำเร็จ');}
   finally{setActiveMode(null);}
  }
@@ -30,6 +33,7 @@ export function AiWorkspace({tenantId,shopId,shopName,liveEnabled,initialRuns}:{
    <article className="ai-task-card"><BarChart3 size={22}/><div><strong>อธิบายเงินรับและต้นทุน</strong><p>ดูสูตร เงินเหลือ และย้อนกลับไปยังหลักฐานต้นทาง</p><Link className="text-link" href="/performance">เปิดหน้าการเงิน <ArrowRight size={15}/></Link></div></article>
    <article className="ai-task-card"><Landmark size={22}/><div><strong>ช่วยตรวจเงินโอน</strong><p>สรุปข้อยกเว้นจาก Statement และให้ผู้ใช้ยืนยันงานติดตาม</p><Link className="text-link" href="/settlements">เปิดผู้ช่วยกระทบยอด <ArrowRight size={15}/></Link></div></article>
   </section>
+  <AgentTeamOverview state={agentTeam} shopName={shopName}/>
   <div className="ai-grid merchant-ai-grid">
    <main className="panel ai-workbench">
     <div className="ai-workbench-heading"><div><span className="section-eyebrow">ขอบเขตปัจจุบัน</span><h2>ถามเกี่ยวกับสินค้าในร้าน</h2><p>ผู้ช่วยจะใช้เครื่องมืออ่านรายการสินค้าใน {shopName} เท่านั้น ไม่มีเครื่องมือแก้สินค้า สั่งซื้อ หรือเปลี่ยนตัวเลข</p></div><span className={`pill ${liveEnabled?'green':'neutral'}`}>{liveEnabled?'เชื่อม AI แล้ว':'โหมดตรวจข้อมูล'}</span></div>
@@ -37,9 +41,24 @@ export function AiWorkspace({tenantId,shopId,shopName,liveEnabled,initialRuns}:{
     {error?<p ref={errorRef} tabIndex={-1} className="notice error" role="alert">{error}</p>:null}
     {output?<AssistantResult ref={resultRef} output={output} shopName={shopName}/>:<section className="ai-empty-result"><Search size={25}/><h3>เริ่มจากตรวจข้อมูลสินค้า</h3><p>ผลลัพธ์จะแสดงเวลา ขอบเขต ข้อจำกัด และ SKU ที่ใช้อ้างอิงทุกครั้ง</p></section>}
    </main>
-   <HistoryPanel runs={initialRuns} shopName={shopName}/>
+   <HistoryPanel runs={historyRuns} shopName={shopName}/>
   </div>
  </>;
+}
+
+function AgentTeamOverview({state,shopName}:{state:AgentWorkspaceState;shopName:string}){
+ return <section className="panel agent-team-overview is-on-hold" aria-labelledby="agent-team-title">
+  <div className="agent-team-heading">
+   <div><span className="section-eyebrow">ทีม AI Commerce</span><h2 id="agent-team-title">ผู้ช่วยหลายคนทำงานร่วมกัน</h2><p>Commerce Lead จะแบ่งงานให้ผู้เชี่ยวชาญด้านการตลาดและสต๊อก แล้วรวมคำแนะนำพร้อมหลักฐานจาก {shopName}</p></div>
+   <span className="pill neutral"><span className="agent-status-dot" aria-hidden="true"/>{state.label}</span>
+  </div>
+  <div className="agent-team-grid" aria-label="สมาชิกทีม AI">
+   <article><UsersRound size={20}/><div><strong>Commerce Lead</strong><p>รับคำถาม วางแผน และสรุปคำตอบจากผู้เชี่ยวชาญ</p></div></article>
+   <article><Megaphone size={20}/><div><strong>Marketing Analysis</strong><p>อ่านยอดขายและหาโอกาสโปรโมตสินค้า</p></div></article>
+   <article><PackageSearch size={20}/><div><strong>Inventory Analysis</strong><p>ตรวจสต๊อก ความเสี่ยงของขาด และความพร้อมขาย</p></div></article>
+  </div>
+  <div className="agent-team-state"><ShieldCheck size={18}/><div><strong>ระบบยังป้องกันการเรียก AI อยู่</strong><p>{state.message} ระหว่างนี้ยังใช้เมนูตรวจข้อมูลด้านล่างได้ตามปกติ</p></div></div>
+ </section>;
 }
 
 function AssistantResult({ref,output,shopName}:{ref:Ref<HTMLElement>;output:Output;shopName:string}){

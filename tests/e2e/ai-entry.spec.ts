@@ -3,12 +3,14 @@ import { demo } from '../../packages/domain/src/demo';
 
 async function start(page:Page){
  await page.goto('/login');await page.getByLabel('อีเมล',{exact:true}).fill('owner@chino.demo');await page.getByLabel('รหัสผ่าน',{exact:true}).fill(demo.password);await page.getByRole('button',{name:'เข้าสู่พื้นที่ทำงาน'}).click();
- await expect(page.getByRole('heading',{name:'ภาพรวม',exact:true})).toBeVisible();await page.getByLabel('เลือกร้านค้า',{exact:true}).selectOption(demo.shops.tiktok);await expect(page).toHaveURL(/\/catalog$/);await page.goto('/ai');
+ await expect(page.getByRole('heading',{name:'ภาพรวม',exact:true})).toBeVisible();const shopPicker=page.getByLabel('เลือกร้านค้า',{exact:true});if(await shopPicker.inputValue()!==demo.shops.tiktok)await Promise.all([page.waitForURL(/\/catalog$/),shopPicker.selectOption(demo.shops.tiktok)]);await page.goto('/ai');
 }
 
 test('merchant gets an evidence-led read-only assistant and shop-scoped history',async({page})=>{
  await page.setViewportSize({width:320,height:844});await start(page);
  await expect(page.getByRole('heading',{name:'ผู้ช่วยวิเคราะห์ข้อมูล',exact:true})).toBeVisible();await expect(page.getByText('อ่านและอธิบายเท่านั้น',{exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'ผู้ช่วยหลายคนทำงานร่วมกัน',exact:true})).toBeVisible();await expect(page.getByText('Commerce Lead',{exact:true})).toBeVisible();await expect(page.getByText('Marketing Analysis',{exact:true})).toBeVisible();await expect(page.getByText('Inventory Analysis',{exact:true})).toBeVisible();
+ await expect(page.getByText('ระบบยังป้องกันการเรียก AI อยู่',{exact:true})).toBeVisible();await expect(page.getByText('ยังไม่เปิดใช้งาน',{exact:true})).toBeVisible();
  await expect(page.getByText('ยังไม่ได้เปิดการเชื่อมต่อโมเดล AI',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'ถามผู้ช่วย AI',exact:true})).toHaveCount(0);
  await expect(page.getByRole('link',{name:'เปิดหน้าการเงิน',exact:true})).toHaveAttribute('href','/performance');await expect(page.getByRole('link',{name:'เปิดผู้ช่วยกระทบยอด',exact:true})).toHaveAttribute('href','/settlements');
  const responsePromise=page.waitForResponse(response=>response.url().endsWith(`/api/tenants/${demo.tenants.chino}/ai`)&&response.request().method()==='POST');
