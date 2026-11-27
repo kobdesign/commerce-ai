@@ -29,6 +29,16 @@ describe('AI team workspace state',()=>{
     })).toMatchObject({status:'setup_pending',canStart:false,label:'เตรียมช่องสนทนา'});
   });
 
+  it('allows a conversation only behind the explicit server-side gate',()=>{
+    expect(agentWorkspaceState(tenantId,{
+      ...enabled,
+      COMMERCE_AGENT_EVE_URL:'https://eve.example.test',
+      COMMERCE_AGENT_SESSION_KEY_ID:'staging-key-1',
+      COMMERCE_AGENT_SESSION_PRIVATE_KEY:'private-key-is-kept-on-the-server',
+      COMMERCE_AGENT_CONVERSATION_ENABLED:'true',
+    })).toMatchObject({status:'ready',canStart:true,label:'พร้อมทดสอบ'});
+  });
+
   it('keeps another tenant out of the enabled tenant route',()=>{
     expect(agentWorkspaceState('22222222-2222-4222-8222-222222222222',{
       ...enabled,
