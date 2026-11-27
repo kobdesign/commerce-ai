@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useEffect,useRef,useState,type Ref } from 'react';
+import { useEffect,useRef,useState,type FormEvent,type Ref } from 'react';
 import { ArrowRight,BarChart3,Boxes,Landmark,Megaphone,PackageSearch,Search,ShieldCheck,Sparkles,UsersRound } from 'lucide-react';
 import { request } from '../lib/client';
 import type { AiRun,catalogEvidence } from '@commerce/ai';
@@ -9,6 +9,13 @@ import type {AgentWorkspaceState} from '../lib/agent-workspace';
 type Evidence=Awaited<ReturnType<typeof catalogEvidence>>;
 type Output={id:string;text:string;mode:string;evidence:Evidence};
 type SerializedRun=Omit<AiRun,'created_at'>&{created_at:string};
+type AgentSession={sessionId:string;expiresAt:string};
+type AgentTurn={
+ sessionId:string;deliveryId:string;status:'completed'|'awaiting_input';answer:string;
+ delegatedAgents:string[];toolNames:string[];
+ usage:{inputTokens:number;outputTokens:number;costUsd:number|null};nextStreamIndex:number;
+};
+type AgentExchange={question:string;turn:AgentTurn};
 const suggestions=['สินค้ามีกี่หมวดและหมวดอะไรบ้าง','ยกตัวอย่าง SKU พร้อมหมวดสินค้า','สรุปความหลากหลายของสินค้าในร้าน'];
 const date=(value:string)=>new Intl.DateTimeFormat('th-TH',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Bangkok'}).format(new Date(value));
 
@@ -33,7 +40,7 @@ export function AiWorkspace({tenantId,shopId,shopName,liveEnabled,agentTeam,init
    <article className="ai-task-card"><BarChart3 size={22}/><div><strong>อธิบายเงินรับและต้นทุน</strong><p>ดูสูตร เงินเหลือ และย้อนกลับไปยังหลักฐานต้นทาง</p><Link className="text-link" href="/performance">เปิดหน้าการเงิน <ArrowRight size={15}/></Link></div></article>
    <article className="ai-task-card"><Landmark size={22}/><div><strong>ช่วยตรวจเงินโอน</strong><p>สรุปข้อยกเว้นจาก Statement และให้ผู้ใช้ยืนยันงานติดตาม</p><Link className="text-link" href="/settlements">เปิดผู้ช่วยกระทบยอด <ArrowRight size={15}/></Link></div></article>
   </section>
-  <AgentTeamOverview state={agentTeam} shopName={shopName}/>
+  <AgentTeamOverview state={agentTeam} tenantId={tenantId} shopId={shopId} shopName={shopName}/>
   <div className="ai-grid merchant-ai-grid">
    <main className="panel ai-workbench">
     <div className="ai-workbench-heading"><div><span className="section-eyebrow">ขอบเขตปัจจุบัน</span><h2>ถามเกี่ยวกับสินค้าในร้าน</h2><p>ผู้ช่วยจะใช้เครื่องมืออ่านรายการสินค้าใน {shopName} เท่านั้น ไม่มีเครื่องมือแก้สินค้า สั่งซื้อ หรือเปลี่ยนตัวเลข</p></div><span className={`pill ${liveEnabled?'green':'neutral'}`}>{liveEnabled?'เชื่อม AI แล้ว':'โหมดตรวจข้อมูล'}</span></div>
@@ -46,18 +53,48 @@ export function AiWorkspace({tenantId,shopId,shopName,liveEnabled,agentTeam,init
  </>;
 }
 
-function AgentTeamOverview({state,shopName}:{state:AgentWorkspaceState;shopName:string}){
- return <section className="panel agent-team-overview is-on-hold" aria-labelledby="agent-team-title">
+function AgentTeamOverview({state,tenantId,shopId,shopName}:{state:AgentWorkspaceState;tenantId:string;shopId:string;shopName:string}){
+ const [session,setSession]=useState<AgentSession|null>(null),[streamIndex,setStreamIndex]=useState(0),[question,setQuestion]=useState('สัปดาห์หน้าควรโปรโมตสินค้าอะไร โดยไม่เสี่ยงของขาด'),[exchanges,setExchanges]=useState<AgentExchange[]>([]),[status,setStatus]=useState<'idle'|'starting'|'thinking'|'ending'>('idle'),[error,setError]=useState('');
+ const busy=status!=='idle';
+ async function ask(event:FormEvent){
+  event.preventDefault();const message=question.trim();if(!message||busy)return;
+  setError('');
+  try{
+   let active=session;
+   if(!active){setStatus('starting');active=await request<AgentSession>(`/api/tenants/${tenantId}/agent-conversations`,{shopId});setSession(active);}
+   setStatus('thinking');
+   const turn=await request<AgentTurn>(`/api/tenants/${tenantId}/agent-conversations/${encodeURIComponent(active.sessionId)}/messages`,{message,streamIndex});
+   setStreamIndex(turn.nextStreamIndex);setExchanges(current=>[...current,{question:message,turn}]);setQuestion('');
+  }catch(cause){setError(cause instanceof Error?cause.message:'ยังติดต่อทีม AI ไม่สำเร็จ');}
+  finally{setStatus('idle');}
+ }
+ async function end(){
+  if(!session||busy)return;setStatus('ending');setError('');
+  try{await request(`/api/tenants/${tenantId}/agent-conversations/${encodeURIComponent(session.sessionId)}/end`,{reason:'ผู้ใช้จบการสนทนาจากหน้า AI workspace'});setSession(null);setStreamIndex(0);setExchanges([]);setQuestion('สัปดาห์หน้าควรโปรโมตสินค้าอะไร โดยไม่เสี่ยงของขาด');}
+  catch(cause){setError(cause instanceof Error?cause.message:'ยังจบการสนทนาไม่สำเร็จ');}
+  finally{setStatus('idle');}
+ }
+ return <section className={`panel agent-team-overview ${state.canStart?'is-ready':'is-on-hold'}`} aria-labelledby="agent-team-title">
   <div className="agent-team-heading">
    <div><span className="section-eyebrow">ทีม AI Commerce</span><h2 id="agent-team-title">ผู้ช่วยหลายคนทำงานร่วมกัน</h2><p>Commerce Lead จะแบ่งงานให้ผู้เชี่ยวชาญด้านการตลาดและสต๊อก แล้วรวมคำแนะนำพร้อมหลักฐานจาก {shopName}</p></div>
-   <span className="pill neutral"><span className="agent-status-dot" aria-hidden="true"/>{state.label}</span>
+   <span className={`pill ${state.canStart?'green':'neutral'}`}><span className="agent-status-dot" aria-hidden="true"/>{state.label}</span>
   </div>
   <div className="agent-team-grid" aria-label="สมาชิกทีม AI">
    <article><UsersRound size={20}/><div><strong>Commerce Lead</strong><p>รับคำถาม วางแผน และสรุปคำตอบจากผู้เชี่ยวชาญ</p></div></article>
    <article><Megaphone size={20}/><div><strong>Marketing Analysis</strong><p>อ่านยอดขายและหาโอกาสโปรโมตสินค้า</p></div></article>
    <article><PackageSearch size={20}/><div><strong>Inventory Analysis</strong><p>ตรวจสต๊อก ความเสี่ยงของขาด และความพร้อมขาย</p></div></article>
   </div>
-  <div className="agent-team-state"><ShieldCheck size={18}/><div><strong>ระบบยังป้องกันการเรียก AI อยู่</strong><p>{state.message} ระหว่างนี้ยังใช้เมนูตรวจข้อมูลด้านล่างได้ตามปกติ</p></div></div>
+  {state.canStart?<div className="agent-conversation">
+   <div className="agent-conversation-safety"><ShieldCheck size={18}/><div><strong>ทดสอบแบบอ่านข้อมูลเท่านั้น</strong><p>{state.message} ทุกคำขอถูกจำกัดเฉพาะ {shopName} และไม่มีสิทธิ์แก้สต๊อกหรือข้อมูลการเงิน</p></div>{session?<button type="button" className="button secondary" disabled={busy} onClick={()=>void end()}>{status==='ending'?'กำลังจบ…':'จบการสนทนา'}</button>:null}</div>
+   {exchanges.length?<div className="agent-transcript" aria-live="polite">{exchanges.map(exchange=><article key={exchange.turn.deliveryId}>
+    <p className="agent-user-message"><strong>คุณ</strong>{exchange.question}</p>
+    <div className="agent-answer"><strong>Commerce Lead</strong><p>{exchange.turn.answer||'ทีม AI รอข้อมูลยืนยันเพิ่มเติม'}</p>
+     <div className="agent-answer-evidence"><span>ทีมที่ร่วมวิเคราะห์: {exchange.turn.delegatedAgents.length?exchange.turn.delegatedAgents.join(', '):'Commerce Lead'}</span><span>เครื่องมืออ่านข้อมูล: {exchange.turn.toolNames.length?exchange.turn.toolNames.join(', '):'ไม่มี'}</span><span>Token: {exchange.turn.usage.inputTokens.toLocaleString('th-TH')} เข้า · {exchange.turn.usage.outputTokens.toLocaleString('th-TH')} ออก</span></div>
+    </div>
+   </article>)}</div>:null}
+   <form className="agent-conversation-form" onSubmit={ask}><label htmlFor="agent-team-question">ถามทีม AI<textarea id="agent-team-question" rows={3} maxLength={2000} value={question} disabled={busy} onChange={event=>setQuestion(event.target.value)}/><span className="field-help">ตัวอย่าง: สัปดาห์หน้าควรโปรโมตสินค้าอะไร โดยไม่เสี่ยงของขาด</span></label><button type="submit" className="button primary" disabled={busy||!question.trim()}><Sparkles size={16}/>{status==='starting'?'กำลังเปิดห้องสนทนา…':status==='thinking'?'ทีมกำลังวิเคราะห์…':'ส่งให้ทีม AI'}</button></form>
+   {error?<p className="notice error" role="alert">{error}</p>:null}
+  </div>:<div className="agent-team-state"><ShieldCheck size={18}/><div><strong>ระบบยังป้องกันการเรียก AI อยู่</strong><p>{state.message} ระหว่างนี้ยังใช้เมนูตรวจข้อมูลด้านล่างได้ตามปกติ</p></div></div>}
  </section>;
 }
 

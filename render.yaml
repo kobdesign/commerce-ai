@@ -20,6 +20,10 @@ services:
         value: "true"
       - key: COMMERCE_AGENT_DYNAMIC_ROUTING
         value: "false"
+      - key: COMMERCE_AGENT_CONVERSATION_ENABLED
+        value: "false"
+      - key: COMMERCE_AGENT_EVE_URL
+        sync: false
       - key: COMMERCE_AGENT_SESSION_KEY_ID
         sync: false
       - key: COMMERCE_AGENT_SESSION_PRIVATE_KEY

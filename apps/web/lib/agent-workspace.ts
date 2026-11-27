@@ -1,6 +1,6 @@
 import {readAgentRouteConfiguration,resolveAgentRoute,type AgentRouteReason} from '@commerce/agent-routing';
 
-export type AgentWorkspaceStatus='safety_hold'|'setup_pending';
+export type AgentWorkspaceStatus='safety_hold'|'setup_pending'|'ready';
 export type AgentWorkspaceState={
   status:AgentWorkspaceStatus;
   canStart:boolean;
@@ -43,6 +43,10 @@ export function agentWorkspaceState(
   const sessionReady=Boolean(env.COMMERCE_AGENT_SESSION_KEY_ID?.trim()&&env.COMMERCE_AGENT_SESSION_PRIVATE_KEY?.trim());
   if(!runtimeReady||!sessionReady){
     return {status:'setup_pending',canStart:false,label:'กำลังเชื่อมระบบ',message:'ร้านนี้ได้รับสิทธิ์แล้ว แต่การเชื่อมต่อทีม AI ยังไม่สมบูรณ์'};
+  }
+
+  if(env.COMMERCE_AGENT_CONVERSATION_ENABLED==='true'){
+    return {status:'ready',canStart:true,label:'พร้อมทดสอบ',message:'ช่องสนทนาผูกกับบริษัท ร้าน และผู้ใช้ที่เข้าสู่ระบบแล้ว'};
   }
 
   return {status:'setup_pending',canStart:false,label:'เตรียมช่องสนทนา',message:'การกำหนดสิทธิ์และการเชื่อม runtime พร้อมแล้ว ขั้นต่อไปคือเปิดช่องสนทนาที่ผูกกับร้านนี้'};

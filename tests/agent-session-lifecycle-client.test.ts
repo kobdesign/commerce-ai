@@ -9,6 +9,7 @@ const idempotencyKey='44444444-4444-4444-8444-444444444444';
 const token='csess_test-token-that-is-never-logged';
 const expiresAt='2026-11-16T14:00:00.000Z';
 const response=(status:number,body:unknown)=>new Response(body===null?null:JSON.stringify(body),{status,headers:{'content-type':'application/json'}});
+const stream=(lines:unknown[])=>new Response(`${lines.map(line=>JSON.stringify(line)).join('\n')}\n`,{status:200,headers:{'content-type':'application/x-ndjson'}});
 const client=(fetchImpl:typeof fetch)=>createCommerceEveSessionClient({
   coreBaseUrl:'https://core.example.test',eveBaseUrl:'https://eve.example.test',tenantId,
   origin:'https://core.example.test',fetch:fetchImpl,idempotencyKey:()=>idempotencyKey,
@@ -45,6 +46,46 @@ describe('Commerce/Eve session lifecycle client',()=>{
       .mockResolvedValueOnce(response(200,{sessionId,status:'abandoned'}));
     await expect(client(fetchImpl).create([shopId])).rejects.toMatchObject({code:'CORE_BIND_FAILED',status:409});
     expect(fetchImpl.mock.calls[3]?.[0]).toBe(`https://core.example.test/api/tenants/${tenantId}/agent-session/abandon`);
+  });
+
+  it('uses separate one-time continuation grants for a message and its stream',async()=>{
+    const messageToken='csess_message-token-that-is-never-logged',streamToken='csess_stream-token-that-is-never-logged';
+    const deliveryId='delivery_message_123',turnId='turn_message_123';
+    const fetchImpl=vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(response(200,{engine:'eve',token:messageToken,capability:'continue',sessionId,expiresAt}))
+      .mockResolvedValueOnce(response(202,{sessionId,deliveryId}))
+      .mockResolvedValueOnce(response(200,{engine:'eve',token:streamToken,capability:'continue',sessionId,expiresAt}))
+      .mockResolvedValueOnce(stream([
+        {$eve:'heartbeat'},
+        {progress:{type:'content.delta',scope:{turnId},data:{partId:'part_1',delta:'กำลังตรวจ'}}},
+        {at:'2026-11-27T00:00:00.000Z',facts:[
+          {type:'child.opened',data:{sessionId:'wrun_child_123',name:'inventory-analysis',stream:'/child'}},
+          {type:'call.requested',scope:{turnId},data:{callId:'call_1',capability:{kind:'tool',name:'read_inventory'},input:{}}},
+          {type:'usage.recorded',scope:{turnId},data:{kind:'model',usage:{inputTokens:120,outputTokens:35,costUsd:0.001}}},
+        ]},
+        {at:'2026-11-27T00:00:01.000Z',facts:[
+          {type:'content.completed',scope:{turnId},data:{partId:'part_1',kind:'text',phase:'reply',value:'ควรโปรโมต SKU-A เพราะสต๊อกเพียงพอ'}},
+          {type:'turn.settled',scope:{turnId},data:{turnId,outcome:'completed',reply:['part_1']}},
+          {type:'delivery.settled',data:{deliveryId,outcome:'handled',turnId}},
+        ]},
+      ]));
+    await expect(client(fetchImpl).send(sessionId,'สัปดาห์หน้าควรโปรโมตสินค้าอะไร',0)).resolves.toEqual({
+      sessionId,deliveryId,status:'completed',answer:'ควรโปรโมต SKU-A เพราะสต๊อกเพียงพอ',
+      delegatedAgents:['inventory-analysis'],toolNames:['read_inventory'],usage:{inputTokens:120,outputTokens:35,costUsd:0.001},nextStreamIndex:2,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(new Headers(fetchImpl.mock.calls[1]?.[1]?.headers).get('authorization')).toBe(`Bearer ${messageToken}`);
+    expect(new Headers(fetchImpl.mock.calls[3]?.[1]?.headers).get('authorization')).toBe(`Bearer ${streamToken}`);
+    expect(fetchImpl.mock.calls[3]?.[0]).toBe(`https://eve.example.test/eve/v1/session/${sessionId}/stream?startIndex=0`);
+  });
+
+  it('does not accept an unrelated or failed delivery as a completed answer',async()=>{
+    const fetchImpl=vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(response(200,{engine:'eve',token,capability:'continue',sessionId,expiresAt}))
+      .mockResolvedValueOnce(response(202,{sessionId,deliveryId:'delivery_target_123'}))
+      .mockResolvedValueOnce(response(200,{engine:'eve',token,capability:'continue',sessionId,expiresAt}))
+      .mockResolvedValueOnce(stream([{at:'2026-11-27T00:00:00.000Z',facts:[{type:'delivery.settled',data:{deliveryId:'delivery_target_123',outcome:'failed'}}]}]));
+    await expect(client(fetchImpl).send(sessionId,'ช่วยวิเคราะห์สินค้า',0)).rejects.toMatchObject({code:'EVE_RESPONSE_INVALID'});
   });
 
   it('persists intent before Eve, records its receipt and then reconciles Core',async()=>{
