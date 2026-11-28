@@ -1,4 +1,4 @@
-import {readAgentRouteConfiguration,resolveAgentRoute,type AgentRouteReason} from '@commerce/agent-routing';
+import {readAgentRouteConfiguration,resolveAgentRoute,resolveDynamicAgentRoute,type AgentRouteReason,type DynamicAgentRoutePolicy} from '@commerce/agent-routing';
 
 export type AgentWorkspaceStatus='safety_hold'|'setup_pending'|'ready';
 export type AgentWorkspaceState={
@@ -25,16 +25,19 @@ const waitingMessages:Record<AgentRouteReason,string>={
 export function agentWorkspaceState(
   tenantId:string,
   env:Readonly<Record<string,string|undefined>>=process.env,
+  dynamicPolicy:DynamicAgentRoutePolicy|null=null,
 ):AgentWorkspaceState{
   let configuration;
   try{configuration=readAgentRouteConfiguration(env);}
   catch{return {status:'setup_pending',canStart:false,label:'กำลังตั้งค่าระบบ',message:'การตั้งค่าทีม AI ยังไม่สมบูรณ์ ผู้ดูแลระบบกำลังตรวจสอบ'};}
 
-  if(env.COMMERCE_AGENT_DYNAMIC_ROUTING==='true'){
-    return {status:'safety_hold',canStart:false,label:'รอเปิดให้ร้านนี้',message:'ทีม AI จะเปิดให้เฉพาะร้านที่ผ่านการอนุมัติรอบทดสอบแล้ว'};
-  }
-
-  const route=resolveAgentRoute(tenantId,configuration);
+  const dynamic=env.COMMERCE_AGENT_DYNAMIC_ROUTING==='true';
+  const environment=env.APP_MODE==='staging-demo'?'staging':'development';
+  const route=dynamic
+    ?(!configuration.eveEnabled?resolveAgentRoute(tenantId,configuration)
+      :configuration.killSwitch?resolveAgentRoute(tenantId,configuration)
+      :resolveDynamicAgentRoute(tenantId,environment,dynamicPolicy))
+    :resolveAgentRoute(tenantId,configuration);
   if(route.engine!=='eve'){
     return {status:'safety_hold',canStart:false,label:'ยังไม่เปิดใช้งาน',message:waitingMessages[route.reason]};
   }

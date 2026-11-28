@@ -1,4 +1,5 @@
-import {AppError} from '@commerce/contracts';
+import {AppError,type Context} from '@commerce/contracts';
+import {agentRouteRuntimePolicy} from '@commerce/db';
 import {CommerceEveLifecycleError,createCommerceEveSessionClient,type CommerceEveSessionClient} from '@commerce/agent-session/client';
 import {applicationOrigin} from './environment';
 import {agentWorkspaceState} from './agent-workspace';
@@ -19,13 +20,14 @@ export function agentConversationServerFetch(req:Request,coreOrigin:string):type
   };
 }
 
-export function agentConversationClient(req:Request,tenantId:string):CommerceEveSessionClient{
-  const state=agentWorkspaceState(tenantId);
+export async function agentConversationClient(req:Request,ctx:Context):Promise<CommerceEveSessionClient>{
+  const policy=process.env.COMMERCE_AGENT_DYNAMIC_ROUTING==='true'?await agentRouteRuntimePolicy(ctx):null;
+  const state=agentWorkspaceState(ctx.tenantId,process.env,policy);
   if(!state.canStart)throw new AppError(503,'AGENT_CONVERSATION_DISABLED',state.message);
   const coreOrigin=applicationOrigin(),eveBaseUrl=process.env.COMMERCE_AGENT_EVE_URL?.trim();
   if(!coreOrigin||!eveBaseUrl)throw new AppError(503,'AGENT_CONVERSATION_DISABLED','การเชื่อมต่อทีม AI ยังไม่สมบูรณ์');
   return createCommerceEveSessionClient({
-    coreBaseUrl:coreOrigin,eveBaseUrl,tenantId,origin:coreOrigin,fetch:agentConversationServerFetch(req,coreOrigin),
+    coreBaseUrl:coreOrigin,eveBaseUrl,tenantId:ctx.tenantId,origin:coreOrigin,fetch:agentConversationServerFetch(req,coreOrigin),
   });
 }
 

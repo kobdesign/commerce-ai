@@ -2,12 +2,12 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState,useSyncExternalStore } from 'react';
-import { LayoutDashboard,Package,ShoppingBag,Sparkles,Users,History,ChevronDown,FileInput,ChartNoAxesCombined,ClipboardCheck,ReceiptText,WalletCards,Landmark,Headset,Inbox,KeyRound,Warehouse,Plug } from 'lucide-react';
+import { LayoutDashboard,Package,ShoppingBag,Sparkles,Users,History,ChevronDown,FileInput,ChartNoAxesCombined,ClipboardCheck,ReceiptText,WalletCards,Landmark,Headset,Inbox,KeyRound,Warehouse,Plug,ShieldCog } from 'lucide-react';
 import { switchOrganization,switchShop } from '../app/actions';
 import type { Role } from '@commerce/contracts';
 const financialRoles:Role[]=['owner','finance','auditor'];
 const orderRoles:Role[]=['owner','finance','operator','auditor'];
-type NavLink={href:string;label:string;icon:typeof Package;roles?:Role[]};
+type NavLink={href:string;label:string;icon:typeof Package;roles?:Role[];platformOnly?:boolean};
 const dailyLinks:NavLink[]=[
  {href:'/',label:'ภาพรวม',icon:LayoutDashboard},
  {href:'/catalog',label:'สินค้า',icon:Package},
@@ -30,16 +30,17 @@ const groups:{label:string;links:NavLink[]}[]=[
   {href:'/activity',label:'ประวัติการทำงาน',icon:History,roles:['owner','auditor']},
   {href:'/integrations/inbox',label:'รายการรับจากระบบเชื่อมต่อ',icon:Inbox,roles:['owner','operator','auditor']},
   {href:'/team/service-access',label:'สิทธิ์ระบบเชื่อมต่อ',icon:KeyRound,roles:['owner','auditor']},
-  {href:'/support/poc',label:'ทดลองหน้าจอช่วยเหลือ',icon:Headset,roles:['owner']}
+  {href:'/support/poc',label:'ทดลองหน้าจอช่วยเหลือ',icon:Headset,roles:['owner']},
+  {href:'/platform/ai',label:'ควบคุม AI รายบริษัท',icon:ShieldCog,platformOnly:true}
  ]}
 ];
 const matches=(path:string,href:string)=>path===href||(href!=='/'&&path.startsWith(href+'/'));
-export function Navigation({role}:{role:Role}){
+export function Navigation({role,platformOwner=false}:{role:Role;platformOwner?:boolean}){
  const path=usePathname();
- return <NavigationMenu key={`${role}:${path}`} role={role} path={path}/>;
+ return <NavigationMenu key={`${role}:${platformOwner}:${path}`} role={role} path={path} platformOwner={platformOwner}/>;
 }
-function NavigationMenu({role,path}:{role:Role;path:string}){
- const allowed=(link:NavLink)=>!link.roles||link.roles.includes(role);
+function NavigationMenu({role,path,platformOwner}:{role:Role;path:string;platformOwner:boolean}){
+ const allowed=(link:NavLink)=>(!link.platformOnly||platformOwner)&&(!link.roles||link.roles.includes(role));
  const daily=dailyLinks.filter(allowed);
  const visibleGroups=groups.map(group=>({...group,links:group.links.filter(allowed)})).filter(group=>group.links.length>0);
  const active=[...daily,...visibleGroups.flatMap(group=>group.links)].filter(link=>matches(path,link.href)).sort((a,b)=>b.href.length-a.href.length)[0]?.href;

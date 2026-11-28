@@ -19,7 +19,7 @@ services:
       - key: COMMERCE_AGENT_EVE_KILL_SWITCH
         value: "true"
       - key: COMMERCE_AGENT_DYNAMIC_ROUTING
-        value: "false"
+        value: "true"
       - key: COMMERCE_AGENT_CONVERSATION_ENABLED
         value: "false"
       - key: COMMERCE_AGENT_EVE_URL

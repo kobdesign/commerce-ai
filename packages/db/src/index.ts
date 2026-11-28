@@ -5,6 +5,8 @@ import {
   agentRouteProposalInput,
   agentRouteRevocationInput,
   AppError,
+  platformAgentRouteActivationInput,
+  platformAgentRouteRevocationInput,
   type AgentRouteEnvironment,
   type Context,
   type Role,
@@ -275,8 +277,14 @@ export type AgentRoutePolicyRecord={
   reason:string;createdAt:Date;updatedAt:Date;
 };
 export type AgentRoutePolicyEvent={
-  id:string;policyId:string;policyVersion:number;actorId:string;actorRole:'owner'|'auditor';
-  action:'proposed'|'approved'|'revoked';reason:string;snapshot:Record<string,unknown>;createdAt:Date;
+  id:string;policyId:string;policyVersion:number;actorId:string;actorRole:'owner'|'auditor'|'platform_owner';
+  action:'proposed'|'approved'|'activated'|'revoked';reason:string;snapshot:Record<string,unknown>;createdAt:Date;
+};
+
+export type PlatformAgentTenantRecord={
+  tenantId:string;tenantName:string;shopCount:number;policyId:string|null;environment:AgentRouteEnvironment|null;
+  dataScope:'synthetic'|null;status:'pending'|'active'|'revoked'|null;version:number|null;expiresAt:Date|null;
+  reason:string|null;updatedAt:Date|null;eventCount:number;lastAction:'proposed'|'approved'|'activated'|'revoked'|null;lastEventAt:Date|null;
 };
 
 const routePolicySelect=`id,tenant_id AS "tenantId",engine,environment,data_scope AS "dataScope",status,version,
@@ -301,6 +309,49 @@ function mapAgentRouteError(error:unknown):never{
   if(message.includes('AGENT_ROUTE_ALREADY_REVOKED'))throw new AppError(409,'AGENT_ROUTE_ALREADY_REVOKED','นโยบายนี้ถูกเพิกถอนแล้ว');
   if(message.includes('AGENT_ROUTE_INVALID'))throw new AppError(400,'INVALID_AGENT_ROUTE_POLICY','ข้อมูลนโยบายเส้นทาง AI ไม่ถูกต้อง');
   throw error;
+}
+
+function mapPlatformAgentRouteError(error:unknown):never{
+  const message=error instanceof Error?error.message:'';
+  if(message.includes('PLATFORM_OWNER_FORBIDDEN'))throw new AppError(403,'FORBIDDEN','เฉพาะผู้ดูแลแพลตฟอร์มที่จัดการการเปิดใช้ AI รายบริษัทได้');
+  mapAgentRouteError(error);
+}
+
+export async function isPlatformOwner(userId:string){
+  return withActor(userId,null,async tx=>(await tx.query<{allowed:boolean}>('SELECT app.is_platform_owner() AS allowed'))[0]?.allowed===true);
+}
+
+export async function platformAgentControlWorkspace(userId:string){
+  try{return await withActor(userId,null,async tx=>({
+    canManage:true as const,
+    tenants:await tx.query<PlatformAgentTenantRecord>(`SELECT tenant_id AS "tenantId",tenant_name AS "tenantName",
+      shop_count::integer AS "shopCount",policy_id AS "policyId",environment,data_scope AS "dataScope",status,version,
+      expires_at AS "expiresAt",reason,updated_at AS "updatedAt",event_count::integer AS "eventCount",
+      last_action AS "lastAction",last_event_at AS "lastEventAt" FROM app.platform_agent_route_workspace()`),
+  }));}catch(error){mapPlatformAgentRouteError(error);}
+}
+
+export async function activatePlatformAgentRoute(userId:string,input:unknown){
+  const parsed=platformAgentRouteActivationInput.parse(input),environment=currentAgentRouteEnvironment();
+  if(parsed.environment!==environment)throw new AppError(400,'AGENT_ROUTE_ENVIRONMENT_MISMATCH','นโยบายต้องใช้ environment เดียวกับ Commerce Core');
+  try{return await withActor(userId,null,async tx=>(await tx.query<AgentRoutePolicyRecord>(
+    `SELECT ${routePolicySelect} FROM app.platform_activate_agent_route_policy($1,$2,$3,$4,$5)`,
+    [parsed.tenantId,parsed.version,parsed.environment,parsed.expiresAt,parsed.reason],
+  ))[0]);}catch(error){mapPlatformAgentRouteError(error);}
+}
+
+export async function revokePlatformAgentRoute(userId:string,input:unknown){
+  const parsed=platformAgentRouteRevocationInput.parse(input);currentAgentRouteEnvironment();
+  try{return await withActor(userId,null,async tx=>(await tx.query<AgentRoutePolicyRecord>(
+    `SELECT ${routePolicySelect} FROM app.platform_revoke_agent_route_policy($1,$2,$3)`,
+    [parsed.tenantId,parsed.version,parsed.reason],
+  ))[0]);}catch(error){mapPlatformAgentRouteError(error);}
+}
+
+export async function agentRouteRuntimePolicy(ctx:Context){
+  return withTenant(ctx,async tx=>(await tx.query<{
+    status:'pending'|'active'|'revoked';environment:AgentRouteEnvironment;expiresAt:Date;version:number;
+  }>(`SELECT status,environment,expires_at AS "expiresAt",version FROM app.agent_route_policies WHERE tenant_id=$1`,[ctx.tenantId]))[0]??null);
 }
 
 export async function agentRouteControlWorkspace(ctx:Context){

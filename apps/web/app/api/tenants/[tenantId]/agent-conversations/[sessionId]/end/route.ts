@@ -7,9 +7,9 @@ const inputSchema=z.object({reason:z.string().trim().min(10).max(500)}).strict()
 
 export async function POST(req:Request,{params}:Params){
   return respond(async()=>{
-    const {tenantId,sessionId}=await params;await apiContext(tenantId);
+    const {tenantId,sessionId}=await params;const ctx=await apiContext(tenantId);
     const input=inputSchema.parse(await mutationInput(req,4_096));
-    try{return await agentConversationClient(req,tenantId).end(sessionId,input.reason);}
+    try{return await (await agentConversationClient(req,ctx)).end(sessionId,input.reason);}
     catch(error){return agentConversationError(error);}
   });
 }

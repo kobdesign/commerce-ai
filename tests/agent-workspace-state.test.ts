@@ -47,4 +47,12 @@ describe('AI team workspace state',()=>{
       COMMERCE_AGENT_SESSION_PRIVATE_KEY:'private-key-is-kept-on-the-server',
     })).toMatchObject({status:'safety_hold',canStart:false});
   });
+
+  it('uses the durable tenant policy when dynamic routing is enabled',()=>{
+    expect(agentWorkspaceState(tenantId,{
+      COMMERCE_AGENT_EVE_ENABLED:'true',COMMERCE_AGENT_EVE_KILL_SWITCH:'false',COMMERCE_AGENT_DYNAMIC_ROUTING:'true',
+      APP_MODE:'staging-demo',COMMERCE_AGENT_EVE_URL:'https://eve.example.test',COMMERCE_AGENT_SESSION_KEY_ID:'staging-key-1',
+      COMMERCE_AGENT_SESSION_PRIVATE_KEY:'private-key-is-kept-on-the-server',COMMERCE_AGENT_CONVERSATION_ENABLED:'true',
+    },{status:'active',environment:'staging',expiresAt:new Date(Date.now()+60_000),version:1})).toMatchObject({status:'ready',canStart:true});
+  });
 });
