@@ -27,7 +27,9 @@ export async function agentConversationClient(req:Request,ctx:Context):Promise<C
   const coreOrigin=applicationOrigin(),eveBaseUrl=process.env.COMMERCE_AGENT_EVE_URL?.trim();
   if(!coreOrigin||!eveBaseUrl)throw new AppError(503,'AGENT_CONVERSATION_DISABLED','การเชื่อมต่อทีม AI ยังไม่สมบูรณ์');
   return createCommerceEveSessionClient({
-    coreBaseUrl:coreOrigin,eveBaseUrl,tenantId:ctx.tenantId,origin:coreOrigin,fetch:agentConversationServerFetch(req,coreOrigin),
+    coreBaseUrl:coreOrigin,eveBaseUrl,tenantId:ctx.tenantId,origin:coreOrigin,
+    vercelOidcToken:process.env.COMMERCE_AGENT_VERCEL_OIDC_TOKEN,
+    fetch:agentConversationServerFetch(req,coreOrigin),
   });
 }
 

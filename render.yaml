@@ -24,6 +24,8 @@ services:
         value: "true"
       - key: COMMERCE_AGENT_EVE_URL
         sync: false
+      - key: COMMERCE_AGENT_VERCEL_OIDC_TOKEN
+        sync: false
       - key: COMMERCE_AGENT_SESSION_KEY_ID
         sync: false
       - key: COMMERCE_AGENT_SESSION_PRIVATE_KEY

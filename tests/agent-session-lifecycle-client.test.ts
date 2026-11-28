@@ -28,6 +28,22 @@ describe('Commerce/Eve session lifecycle client',()=>{
     expect(fetchImpl.mock.calls[2]?.[0]).toBe(`https://core.example.test/api/tenants/${tenantId}/agent-session/bind`);
   });
 
+  it('sends the trusted Vercel OIDC token only to Eve',async()=>{
+    const oidcToken='eyJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJwcmV2aWV3In0.signature';
+    const fetchImpl=vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(response(200,{engine:'eve',token,capability:'create',sessionId:null,expiresAt}))
+      .mockResolvedValueOnce(response(202,{sessionId}))
+      .mockResolvedValueOnce(response(200,{sessionId,status:'active',expiresAt}));
+    const protectedClient=createCommerceEveSessionClient({
+      coreBaseUrl:'https://core.example.test',eveBaseUrl:'https://eve.example.test',tenantId,
+      origin:'https://core.example.test',fetch:fetchImpl,vercelOidcToken:oidcToken,
+    });
+    await protectedClient.create([shopId]);
+    expect(new Headers(fetchImpl.mock.calls[0]?.[1]?.headers).has('x-vercel-trusted-oidc-idp-token')).toBe(false);
+    expect(new Headers(fetchImpl.mock.calls[1]?.[1]?.headers).get('x-vercel-trusted-oidc-idp-token')).toBe(oidcToken);
+    expect(new Headers(fetchImpl.mock.calls[2]?.[1]?.headers).has('x-vercel-trusted-oidc-idp-token')).toBe(false);
+  });
+
   it('retries an ambiguous bind with the exact same grant and session',async()=>{
     const fetchImpl=vi.fn<typeof fetch>()
       .mockResolvedValueOnce(response(200,{engine:'eve',token,capability:'create',sessionId:null,expiresAt}))

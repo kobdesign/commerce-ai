@@ -2,6 +2,7 @@ export type CommerceEveSessionClientConfig={
   coreBaseUrl:string;
   eveBaseUrl:string;
   tenantId:string;
+  vercelOidcToken?:string;
   fetch?:typeof fetch;
   origin?:string;
   idempotencyKey?:()=>string;
@@ -116,6 +117,11 @@ export function createCommerceEveSessionClient(config:CommerceEveSessionClientCo
   const tenantId=validTenant(config.tenantId);
   const fetchImpl=config.fetch??fetch;
   const idempotencyKey=config.idempotencyKey??(()=>globalThis.crypto.randomUUID());
+  const vercelOidcToken=config.vercelOidcToken?.trim();
+  if(vercelOidcToken&&(!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(vercelOidcToken)||vercelOidcToken.length>8192)){
+    throw new Error('Vercel trusted OIDC token is invalid');
+  }
+  const eveHeaders=():Record<string,string>=>vercelOidcToken?{'x-vercel-trusted-oidc-idp-token':vercelOidcToken}:{};
   const coreHeaders=()=>({'content-type':'application/json',...(config.origin?{origin:config.origin}:{})});
   const corePath=(suffix='')=>`${core}/api/tenants/${encodeURIComponent(tenantId)}/agent-session${suffix}`;
 
@@ -161,7 +167,7 @@ export function createCommerceEveSessionClient(config:CommerceEveSessionClientCo
       const issued=await grant({shopIds});
       if(issued.capability!=='create'||issued.sessionId!==null)throw new CommerceEveLifecycleError('CORE_GRANT_FAILED',null);
       let accepted:Response;
-      try{accepted=await fetchImpl(`${eve}/eve/v1/session`,{method:'POST',headers:{authorization:`Bearer ${issued.token}`},redirect:'error'});}
+      try{accepted=await fetchImpl(`${eve}/eve/v1/session`,{method:'POST',headers:{...eveHeaders(),authorization:`Bearer ${issued.token}`},redirect:'error'});}
       catch{throw new CommerceEveLifecycleError('EVE_CREATE_FAILED',null);}
       const acceptedBody=object(await json(accepted));
       const sessionId=acceptedBody?.sessionId;
@@ -191,7 +197,7 @@ export function createCommerceEveSessionClient(config:CommerceEveSessionClientCo
       if(messageGrant.capability!=='continue'||messageGrant.sessionId!==sessionId)throw new CommerceEveLifecycleError('CORE_GRANT_FAILED',null);
       let accepted:Response;
       try{accepted=await fetchImpl(`${eve}/eve/v1/session/${encodeURIComponent(sessionId)}`,{
-        method:'POST',headers:{authorization:`Bearer ${messageGrant.token}`,'content-type':'application/json'},
+        method:'POST',headers:{...eveHeaders(),authorization:`Bearer ${messageGrant.token}`,'content-type':'application/json'},
         body:JSON.stringify({message:normalizedMessage,idempotencyKey:idempotencyKey()}),redirect:'error',
       });}catch{throw new CommerceEveLifecycleError('EVE_MESSAGE_FAILED',null);}
       const acceptedBody=object(await json(accepted)),deliveryId=acceptedBody?.deliveryId;
@@ -204,7 +210,7 @@ export function createCommerceEveSessionClient(config:CommerceEveSessionClientCo
       try{
         let stream:Response;
         try{stream=await fetchImpl(`${eve}/eve/v1/session/${encodeURIComponent(sessionId)}/stream?startIndex=${startIndex}`,{
-          method:'GET',headers:{authorization:`Bearer ${streamGrant.token}`,accept:'application/x-ndjson'},redirect:'error',signal:controller.signal,
+          method:'GET',headers:{...eveHeaders(),authorization:`Bearer ${streamGrant.token}`,accept:'application/x-ndjson'},redirect:'error',signal:controller.signal,
         });}catch{throw new CommerceEveLifecycleError('EVE_STREAM_FAILED',null);}
         return await readTurnStream(stream,{sessionId,deliveryId,startIndex,signal:controller.signal});
       }finally{clearTimeout(timeout);}
@@ -225,7 +231,7 @@ export function createCommerceEveSessionClient(config:CommerceEveSessionClientCo
       }
       let ended:Response;
       try{ended=await fetchImpl(`${eve}/eve/v1/session/${encodeURIComponent(sessionId)}/end`,{
-        method:'POST',headers:{authorization:`Bearer ${issued.token}`,'content-type':'application/json'},
+        method:'POST',headers:{...eveHeaders(),authorization:`Bearer ${issued.token}`,'content-type':'application/json'},
         body:JSON.stringify({reason:normalizedReason}),redirect:'error',
       });}catch{throw new CommerceEveLifecycleError('EVE_END_FAILED',null);}
       const endedBody=object(await json(ended));

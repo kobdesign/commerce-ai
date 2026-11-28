@@ -44,7 +44,8 @@ export function agentWorkspaceState(
 
   const runtimeReady=Boolean(env.COMMERCE_AGENT_EVE_URL?.trim());
   const sessionReady=Boolean(env.COMMERCE_AGENT_SESSION_KEY_ID?.trim()&&env.COMMERCE_AGENT_SESSION_PRIVATE_KEY?.trim());
-  if(!runtimeReady||!sessionReady){
+  const protectionReady=env.APP_MODE!=='staging-demo'||Boolean(env.COMMERCE_AGENT_VERCEL_OIDC_TOKEN?.trim());
+  if(!runtimeReady||!sessionReady||!protectionReady){
     return {status:'setup_pending',canStart:false,label:'กำลังเชื่อมระบบ',message:'ร้านนี้ได้รับสิทธิ์แล้ว แต่การเชื่อมต่อทีม AI ยังไม่สมบูรณ์'};
   }
 
