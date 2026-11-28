@@ -6,9 +6,9 @@ import {
 } from '@commerce/agent-contracts';
 
 export type CommerceAgentEnvironment='development'|'staging'|'production';
-export type CommerceAgentClientConfig={
-  baseUrl:string;credential:string;environment:CommerceAgentEnvironment;fetch?:typeof fetch;
-};
+export type CommerceAgentClientConfig={baseUrl:string;environment:CommerceAgentEnvironment;fetch?:typeof fetch}&(
+  {credential:string;grantToken?:never}|{credential?:never;grantToken:string}
+);
 export type CommerceAgentRequestOptions={signal?:AbortSignal;idempotencyKey?:string};
 
 const headers={requestId:'x-commerce-request-id',timestamp:'x-commerce-timestamp',environment:'x-commerce-environment',
@@ -22,7 +22,8 @@ function validateConfig(config:CommerceAgentClientConfig){
   const localDevelopment=config.environment==='development'&&url.protocol==='http:'&&['localhost','127.0.0.1'].includes(url.hostname);
   if(url.protocol!=='https:'&&!localDevelopment)throw new Error('Commerce Core URL must use HTTPS outside local development');
   if(url.username||url.password||url.search||url.hash)throw new Error('Commerce Core URL must not contain credentials, query or fragment');
-  if(!/^svc_[A-Za-z0-9_-]{43}$/.test(config.credential))throw new Error('Commerce service credential format is invalid');
+  if('credential' in config&&(!config.credential||!/^svc_[A-Za-z0-9_-]{43}$/.test(config.credential)))throw new Error('Commerce service credential format is invalid');
+  if('grantToken' in config&&!config.grantToken?.startsWith('csg1_'))throw new Error('Commerce session delegation is invalid');
   return url.toString().replace(/\/$/,'');
 }
 function sign(credential:string,method:'POST',path:string,body:string,requestId:string,timestamp:string,environment:CommerceAgentEnvironment){
@@ -47,13 +48,15 @@ export function createCommerceAgentClient(config:CommerceAgentClientConfig){
   const baseUrl=validateConfig(config);const fetchImpl=config.fetch??fetch;
   async function request(operation:AgentReadOperation,input:unknown,options:CommerceAgentRequestOptions={}){
     const definition=agentApiOperations[operation];
-    const parsed=definition.input.parse(input);const body=JSON.stringify(parsed);
+    const parsed=definition.input.parse(input);
+    const body=JSON.stringify(parsed);
     const requestId=options.idempotencyKey?commerceAgentIdempotencyId(options.idempotencyKey,operation):randomUUID();
     const timestamp=new Date().toISOString();
+    const credential='credential' in config?config.credential:undefined;
     const response=await fetchImpl(`${baseUrl}${definition.path}`,{method:'POST',body,signal:options.signal,headers:{
-      'content-type':'application/json','authorization':`Bearer ${config.credential}`,[headers.requestId]:requestId,
+      'content-type':'application/json','authorization':`Bearer ${credential??config.grantToken}`,[headers.requestId]:requestId,
       [headers.timestamp]:timestamp,[headers.environment]:config.environment,[headers.audience]:commerceAgentAudience,
-      [headers.signature]:sign(config.credential,'POST',definition.path,body,requestId,timestamp,config.environment),
+      ...(credential?{[headers.signature]:sign(credential,'POST',definition.path,body,requestId,timestamp,config.environment)}:{}),
     }});
     const json:unknown=await response.json().catch(()=>null);
     if(!response.ok){

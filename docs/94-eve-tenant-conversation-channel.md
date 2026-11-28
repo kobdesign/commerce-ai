@@ -18,11 +18,13 @@ Cookie สำหรับ login ถูก forward เฉพาะคำขอ sa
 
 - `COMMERCE_AGENT_EVE_ENABLED=true`
 - `COMMERCE_AGENT_EVE_KILL_SWITCH=false`
-- tenant อยู่ใน static allowlist
+- tenant มี dynamic route policy ที่ active, environment ตรงกันและยังไม่หมดอายุ
 - มี Eve URL และ Commerce session signing configuration
 - `COMMERCE_AGENT_CONVERSATION_ENABLED=true`
 
-ค่าเริ่มต้นใน Render Blueprint ยังคงปิด Eve, เปิด kill switch และปิด conversation adapter งานนี้จึงไม่เปิด Live AI หรือเปลี่ยน traffic จริง
+Tenant policy จัดการผ่าน [Platform AI Control Center](95-platform-ai-control-center.md) โดยไม่แก้ Environment Variable ราย tenant ค่าเริ่มต้นใน Render Blueprint ยังคงปิด Eve, เปิด kill switch และปิด conversation adapter งานนี้จึงไม่เปิด Live AI หรือเปลี่ยน traffic จริง
+
+ตั้งแต่ [session-delegated read authorization](96-eve-session-delegated-read-auth.md) Eve รับ tenant และร้านจาก signed continuation grant และไม่ใช้ `COMMERCE_AGENT_TENANT_ID`, static shop allowlist หรือ service credential ราย tenant ใน Vercel
 
 ## ขอบเขตรอบนี้
 

@@ -64,7 +64,7 @@ COMMERCE_AGENT_EVE_KILL_SWITCH=false
 COMMERCE_AGENT_DYNAMIC_ROUTING=true
 ```
 
-ค่า default ของทุก flag ยังปิดอยู่ และ Render Blueprint ยังไม่ได้เปิด flag เหล่านี้
+Render Blueprint เปิดเฉพาะ `COMMERCE_AGENT_DYNAMIC_ROUTING=true` เพื่อให้ runtime อ่าน policy จากฐานข้อมูล ส่วน Eve global enable, kill switch และ conversation gate ยังคงปิดแบบ fail closed
 
 ## Code references
 
@@ -86,7 +86,7 @@ COMMERCE_AGENT_DYNAMIC_ROUTING=true
 
 ## ข้อจำกัดที่เหลือ
 
-- ยังไม่มี operator UI หรือ HTTP management endpoint; ใช้เป็น Core service contract สำหรับขั้นต่อไป
+- Platform Owner UI และ HTTP management endpoint ส่งมอบแล้วใน [EVE-CANARY-16](95-platform-ai-control-center.md) สำหรับ synthetic local/staging โดย tenant enrollment ไม่ต้องแก้ deployment allowlist
 - signed grant ใช้ครั้งเดียวและ active grant ถูก revoke พร้อม route แล้วใน [EVE-CANARY-06](83-eve-one-time-grant-registry.md); ยังต้องกำหนด production revocation SLO
 - ยังไม่มี external monitor, alert delivery evidence, approved availability SLO หรือ incident owner
 - readiness approvals ยัง 0/6 และ production decision ยัง NO-GO

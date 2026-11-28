@@ -6,10 +6,13 @@ import { consumeCommerceAgentSessionGrant,createCommerceAgentSession } from '@co
 import { verifyCommerceSessionGrant } from '@commerce/agent-session-auth';
 import {
   agentRouteControlWorkspace,
+  activatePlatformAgentRoute,
   approveAgentRoutePolicy,
   closePools,
+  platformAgentControlWorkspace,
   proposeAgentRoutePolicy,
   resolveContext,
+  revokePlatformAgentRoute,
   revokeAgentRoutePolicy,
   withTenant,
 } from '@commerce/db';
@@ -32,6 +35,28 @@ beforeEach(async()=>{
 afterAll(async()=>{await closePools();await admin.end();});
 
 describe('Dynamic tenant agent route control plane',()=>{
+  it('lets the platform owner enroll and revoke a tenant without deployment allowlists',async()=>{
+    const owner=await resolveContext(demo.users.owner,demo.tenants.chino);
+    const workspace=await platformAgentControlWorkspace(demo.users.owner);
+    expect(workspace.tenants.map(item=>item.tenantId)).toEqual(expect.arrayContaining([demo.tenants.chino,demo.tenants.goods]));
+    await expect(platformAgentControlWorkspace(demo.users.other)).rejects.toMatchObject({status:403,code:'FORBIDDEN'});
+
+    const active=await activatePlatformAgentRoute(demo.users.owner,{
+      tenantId:demo.tenants.chino,version:0,environment:'development',expiresAt:expiresAt(),
+      reason:'Platform owner เปิด AI แบบอ่านอย่างเดียวสำหรับ tenant ทดสอบ',confirmed:true,
+    });
+    expect(active).toMatchObject({tenantId:demo.tenants.chino,status:'active',version:1,requestedBy:demo.users.owner,approvedBy:demo.users.owner});
+    await expect(createCommerceAgentSession(owner,{shopIds:[demo.shops.tiktok]},sessionConfiguration))
+      .resolves.toMatchObject({engine:'eve',reason:'dynamic_tenant_enabled'});
+
+    const revoked=await revokePlatformAgentRoute(demo.users.owner,{
+      tenantId:demo.tenants.chino,version:1,reason:'Platform owner ปิด AI และเพิกถอน session ของ tenant ทดสอบ',confirmed:true,
+    });
+    expect(revoked).toMatchObject({status:'revoked',version:2,revokedBy:demo.users.owner});
+    await expect(createCommerceAgentSession(owner,{shopIds:[demo.shops.tiktok]},sessionConfiguration))
+      .resolves.toEqual({engine:'legacy',reason:'dynamic_policy_revoked',token:null,expiresAt:null});
+  });
+
   it('requires an owner proposal and independent auditor approval before issuing an Eve grant',async()=>{
     const owner=await resolveContext(demo.users.owner,demo.tenants.chino);
     const auditor=await resolveContext(demo.users.consultant,demo.tenants.chino);

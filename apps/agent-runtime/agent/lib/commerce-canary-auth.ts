@@ -79,10 +79,6 @@ export function commerceCanaryAuth(
       });
       if(sessionId===null&&(claims.capability!=='create'||claims.sessionId!==null))throw new Error('create grant required');
       if(sessionId!==null&&(claims.capability!=='continue'||claims.sessionId!==sessionId))throw new Error('continuation session mismatch');
-      if (claims.tenantId !== policy.tenantId) throw new Error('tenant mismatch');
-      if (claims.shopIds.some((shopId) => !policy.shopIds.includes(shopId))) {
-        throw new Error('shop scope mismatch');
-      }
       if (!policy.allowedRoles.includes(claims.role)) throw new Error('role not approved');
       await consumeCommerceGrant(token,claims.grantId,env,fetchImpl);
 
@@ -96,6 +92,7 @@ export function commerceCanaryAuth(
           approvalId: policy.approvalId,
           capability: claims.capability,
           canaryMode: policy.mode,
+          commerceGrant: token,
           grantId: claims.grantId,
           modelId: policy.modelId,
           role: claims.role,

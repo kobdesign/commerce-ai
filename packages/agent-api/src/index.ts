@@ -6,9 +6,10 @@ import {
   type AgentApiErrorCode,type AgentReadOperation,type InventoryQuery,type ProductQuery,type SalesQuery,
 } from '@commerce/agent-contracts';
 import { canonicalAgentEvidenceJson } from '@commerce/agent-evidence';
+import {commerceSessionTokenPrefix,exportCommerceSessionPublicKey,verifyCommerceSessionGrant} from '@commerce/agent-session-auth';
 import {
-  authorizeAgentServiceRequest as authorizeDatabaseRequest,readAgentInventory,readAgentProducts,readAgentSales,
-  readAgentServiceRequestResult,storeAgentServiceRequestResult,
+  authorizeAgentServiceRequest as authorizeDatabaseRequest,authorizeAgentSessionReadRequest,readAgentInventory,readAgentProducts,readAgentSales,
+  readAgentServiceRequestResult,readAgentSessionRequestResult,storeAgentServiceRequestResult,storeAgentSessionRequestResult,
 } from '@commerce/db';
 
 export const agentServiceHeaders={
@@ -50,7 +51,7 @@ function expectedEnvironment(){
 }
 function verifiedBearer(value:string|null,requestId:string){
   const match=value?.match(/^Bearer (.+)$/);
-  if(!match||!credentialPattern.test(match[1]))throw new AgentServiceAuthenticationError('UNAUTHENTICATED','Service credential is missing or invalid',requestId);
+  if(!match)throw new AgentServiceAuthenticationError('UNAUTHENTICATED','Commerce authorization is missing or invalid',requestId);
   return match[1];
 }
 function verifySignature(credential:string,supplied:string|null,canonical:string,requestId:string){
@@ -70,6 +71,10 @@ function mapDatabaseError(error:unknown,requestId:string):never{
   if(message.includes('SERVICE_SHOP_FORBIDDEN'))throw new AgentServiceAuthenticationError('SHOP_FORBIDDEN','Requested shop is outside the service delegation',requestId);
   if(message.includes('SERVICE_SCOPE_FORBIDDEN'))throw new AgentServiceAuthenticationError('SCOPE_FORBIDDEN','Required read scope is not delegated',requestId);
   if(message.includes('SERVICE_CREDENTIAL_INVALID'))throw new AgentServiceAuthenticationError('UNAUTHENTICATED','Service credential is missing or invalid',requestId);
+  if(message.includes('AGENT_SESSION_READ_UNAVAILABLE'))throw new AgentServiceAuthenticationError('UNAUTHENTICATED','Session delegation is expired, revoked or unavailable',requestId);
+  if(message.includes('AGENT_SESSION_READ_SCOPE_FORBIDDEN'))throw new AgentServiceAuthenticationError('SHOP_FORBIDDEN','Requested shop is outside the session delegation',requestId);
+  if(message.includes('AGENT_SESSION_READ_REPLAYED'))throw new AgentServiceAuthenticationError('REQUEST_REPLAYED','Request ID was already used',requestId);
+  if(message.includes('AGENT_SESSION_READ_INVALID'))throw new AgentServiceAuthenticationError('INVALID_REQUEST','Session delegated request metadata is invalid',requestId);
   if(message.includes('AGENT_REQUEST_INVALID'))throw new AgentServiceAuthenticationError('INVALID_REQUEST','Signed request metadata is invalid',requestId);
   throw error;
 }
@@ -97,10 +102,9 @@ export async function authenticateAgentServiceRequest(request:Request,operation:
   const audience=request.headers.get(agentServiceHeaders.audience);
   if(audience!==commerceAgentAudience)throw new AgentServiceAuthenticationError('WRONG_AUDIENCE','Request audience does not match this service',trustedRequestId);
 
-  const credential=verifiedBearer(request.headers.get('authorization'),trustedRequestId);
+  const bearer=verifiedBearer(request.headers.get('authorization'),trustedRequestId);
   const signingInput:AgentSigningInput={method:'POST',path:definition.path,body,requestId:trustedRequestId,timestamp:timestamp.data,environment:environment.data,audience:commerceAgentAudience};
   const canonical=canonicalAgentServiceRequest(signingInput);
-  verifySignature(credential,request.headers.get(agentServiceHeaders.signature),canonical,trustedRequestId);
 
   let json:unknown;
   try{json=JSON.parse(body);}catch{throw new AgentServiceAuthenticationError('INVALID_REQUEST','Request body must be valid JSON',trustedRequestId);}
@@ -110,12 +114,29 @@ export async function authenticateAgentServiceRequest(request:Request,operation:
   const query=parsed.data as {shopIds:string[]};
   const bodyHash=agentRequestBodyHash(body);
   let authorization:Awaited<ReturnType<typeof authorizeDatabaseRequest>>;
+  let authKind:'service'|'session';
   try{
-    authorization=await authorizeDatabaseRequest({
-      credentialHash:createHash('sha256').update(credential,'utf8').digest('hex'),shopIds:query.shopIds,requiredScope:definition.requiredScope,
-      environment:environment.data,audience:commerceAgentAudience,requestId:trustedRequestId,requestTimestamp:timestamp.data,
-      method:'POST',path:definition.path,bodyHash,requestHash:createHash('sha256').update(canonical,'utf8').digest('hex'),
-    });
+    if(credentialPattern.test(bearer)){
+      verifySignature(bearer,request.headers.get(agentServiceHeaders.signature),canonical,trustedRequestId);
+      authorization=await authorizeDatabaseRequest({
+        credentialHash:createHash('sha256').update(bearer,'utf8').digest('hex'),shopIds:query.shopIds,requiredScope:definition.requiredScope,
+        environment:environment.data,audience:commerceAgentAudience,requestId:trustedRequestId,requestTimestamp:timestamp.data,
+        method:'POST',path:definition.path,bodyHash,requestHash:createHash('sha256').update(canonical,'utf8').digest('hex'),
+      });
+      authKind='service';
+    }else if(bearer.startsWith(commerceSessionTokenPrefix)){
+      const keyId=process.env.COMMERCE_AGENT_SESSION_KEY_ID?.trim(),privateKey=process.env.COMMERCE_AGENT_SESSION_PRIVATE_KEY?.trim();
+      if(!keyId||!privateKey||environment.data==='production')throw new Error('AGENT_SESSION_READ_UNAVAILABLE');
+      const claims=verifyCommerceSessionGrant(bearer,{keyId,publicKey:exportCommerceSessionPublicKey(privateKey),environment:environment.data});
+      if(claims.capability!=='continue'||!claims.sessionId)throw new Error('AGENT_SESSION_READ_UNAVAILABLE');
+      authorization=await authorizeAgentSessionReadRequest({
+        tenantId:claims.tenantId,grantId:claims.grantId,subject:claims.subject,claimShopIds:claims.shopIds,role:claims.role,
+        environment:claims.environment,issuedAt:claims.issuedAt,expiresAt:claims.expiresAt,sessionId:claims.sessionId,
+        shopIds:query.shopIds,requiredScope:definition.requiredScope,requestId:trustedRequestId,requestTimestamp:timestamp.data,
+        method:'POST',path:definition.path,bodyHash,
+      });
+      authKind='session';
+    }else throw new Error('SERVICE_CREDENTIAL_INVALID');
   }catch(error){mapDatabaseError(error,trustedRequestId);}
   const context=agentRequestContextSchema.parse({
     tenantId:authorization.tenantId,principalId:authorization.principalId,allowedShopIds:authorization.shopIds,
@@ -123,7 +144,7 @@ export async function authenticateAgentServiceRequest(request:Request,operation:
     authenticatedAt:authorization.authenticatedAt.toISOString(),expiresAt:authorization.expiresAt.toISOString(),
   });
   authorizeAgentQuery(context,operation,query);
-  return {context,query,body,bodyHash,replayed:authorization.replayed};
+  return {context,query,body,bodyHash,replayed:authorization.replayed,authKind};
 }
 
 export function agentApiErrorResponse(error:unknown,fallbackRequestId:string=randomUUID()){
@@ -181,7 +202,9 @@ export async function handleAgentQueryRequest(request:Request,operation:AgentRea
     const resultIdentity={tenantId:authenticated.context.tenantId,requestId:authenticated.context.requestId,
       principalId:authenticated.context.principalId,operation,bodyHash:authenticated.bodyHash};
     if(authenticated.replayed){
-      const stored=await readAgentServiceRequestResult(resultIdentity);
+      const stored=authenticated.authKind==='service'?await readAgentServiceRequestResult(resultIdentity):await readAgentSessionRequestResult({
+        tenantId:resultIdentity.tenantId,requestId:resultIdentity.requestId,subjectId:resultIdentity.principalId,operation,bodyHash:resultIdentity.bodyHash,
+      });
       if(stored!==null){
         const payload=agentApiOperations[operation].output.parse(stored);
         return Response.json(payload,{status:200,headers:{'cache-control':'private, no-store','content-type':'application/json','x-commerce-idempotent-replay':'true'}});
@@ -237,7 +260,10 @@ export async function handleAgentQueryRequest(request:Request,operation:AgentRea
         return {...item,evidence:[evidence('inventory_balance',variantId,sourceUpdatedAt,'inventory-ledger-v1',item),evidence('inventory_policy',variantId,sourceUpdatedAt,'inventory-policy-v1',item)]};
       })});
     }
-    payload=agentApiOperations[operation].output.parse(await storeAgentServiceRequestResult({...resultIdentity,payload}));
+    payload=agentApiOperations[operation].output.parse(authenticated.authKind==='service'
+      ?await storeAgentServiceRequestResult({...resultIdentity,payload})
+      :await storeAgentSessionRequestResult({tenantId:resultIdentity.tenantId,requestId:resultIdentity.requestId,
+        subjectId:resultIdentity.principalId,operation,bodyHash:resultIdentity.bodyHash,payload}));
     return Response.json(payload,{status:200,headers:{'cache-control':'private, no-store','content-type':'application/json',
       'x-commerce-idempotent-replay':authenticated.replayed?'true':'false'}});
   }catch(error){return agentApiErrorResponse(error,fallbackRequestId);}

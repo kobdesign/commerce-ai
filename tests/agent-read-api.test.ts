@@ -1,12 +1,15 @@
-import { randomUUID } from 'node:crypto';
+import { generateKeyPairSync,randomUUID } from 'node:crypto';
 import { afterAll,beforeAll,describe,expect,it } from 'vitest';
 import { Pool } from 'pg';
 import { handleAgentQueryRequest } from '@commerce/agent-api';
 import { AgentEvidenceVerificationError,verifyAgentEvidenceResponse } from '@commerce/agent-evidence';
 import { CommerceAgentApiError,commerceAgentIdempotencyId,createCommerceAgentClient } from '@commerce/commerce-agent-client';
-import { closePools,resolveContext } from '@commerce/db';
+import { activatePlatformAgentRoute,closePools,platformAgentControlWorkspace,resolveContext } from '@commerce/db';
 import { demo } from '@commerce/domain';
 import { createServicePrincipal } from '@commerce/integrations';
+import {bindCommerceAgentSession,consumeCommerceAgentSessionGrant,createCommerceAgentSession} from '@commerce/agent-session';
+import {exportCommerceSessionPublicKey,verifyCommerceSessionGrant} from '@commerce/agent-session-auth';
+import {readAgentRouteConfiguration} from '@commerce/agent-routing';
 
 const admin=new Pool({connectionString:process.env.ADMIN_DATABASE_URL});
 let credential='',goodsCredential='';
@@ -162,5 +165,41 @@ describe('receipt-bound Commerce Agent read APIs',()=>{
     expect(result.rows[0].allowed).toBe(false);
     const resultTable=await admin.query<{allowed:boolean}>("SELECT has_table_privilege('commerce_app','app.agent_service_request_results','SELECT') AS allowed");
     expect(resultTable.rows[0].allowed).toBe(false);
+  });
+
+  it('authorizes tenant-scoped reads with a consumed continuation grant and no tenant credential',async()=>{
+    const pair=generateKeyPairSync('ed25519');
+    const privateKey=pair.privateKey.export({format:'der',type:'pkcs8'}).toString('base64url');
+    const keyId=`delegated-${randomUUID()}`,ctx=await owner(),sessionId=`wrun_${randomUUID()}`;
+    const previousKeyId=process.env.COMMERCE_AGENT_SESSION_KEY_ID,previousPrivateKey=process.env.COMMERCE_AGENT_SESSION_PRIVATE_KEY;
+    process.env.COMMERCE_AGENT_SESSION_KEY_ID=keyId;process.env.COMMERCE_AGENT_SESSION_PRIVATE_KEY=privateKey;
+    try{
+      const policy=(await platformAgentControlWorkspace(demo.users.owner)).tenants.find(item=>item.tenantId===demo.tenants.chino);
+      await activatePlatformAgentRoute(demo.users.owner,{tenantId:demo.tenants.chino,version:policy?.version??0,environment:'development',
+        expiresAt:new Date(Date.now()+3600_000).toISOString(),reason:'เปิด dynamic tenant policy สำหรับ delegated read integration test',confirmed:true});
+      const configuration={environment:'development' as const,keyId,privateKey,dynamicRouting:true,
+        route:readAgentRouteConfiguration({COMMERCE_AGENT_EVE_ENABLED:'true',COMMERCE_AGENT_EVE_KILL_SWITCH:'false'})};
+      const verifier={environment:'development' as const,keyId,publicKey:exportCommerceSessionPublicKey(privateKey)};
+      const created=await createCommerceAgentSession(ctx,{shopIds:[demo.shops.tiktok]},configuration);
+      if(!created.token)throw new Error('Expected create grant');
+      await consumeCommerceAgentSessionGrant(created.token,verifier);
+      await bindCommerceAgentSession(ctx,{grantToken:created.token,sessionId,confirmed:true},configuration);
+      const continued=await createCommerceAgentSession(ctx,{sessionId},configuration);
+      if(!continued.token)throw new Error('Expected continuation grant');
+      await consumeCommerceAgentSessionGrant(continued.token,verifier);
+
+      const delegated=createCommerceAgentClient({baseUrl:'http://localhost:3000',grantToken:continued.token,environment:'development',fetch:localFetch});
+      const response=await delegated.products({shopIds:[demo.shops.tiktok],cursor:null,limit:2,search:'',status:'active'});
+      expect(response.scope.shopIds).toEqual([demo.shops.tiktok]);
+      expect(JSON.stringify(response)).not.toContain(demo.tenants.goods);
+      await expect(delegated.products({shopIds:[demo.shops.goods],cursor:null,limit:2,search:'',status:'active'}))
+        .rejects.toMatchObject<Partial<CommerceAgentApiError>>({status:403,response:{error:{code:'SHOP_FORBIDDEN'}} as never});
+      const claims=verifyCommerceSessionGrant(continued.token,verifier);
+      const receipt=await admin.query<{tenant_id:string;subject_id:string}>('SELECT tenant_id,subject_id FROM app.agent_session_read_receipts WHERE grant_id=$1',[claims.grantId]);
+      expect(receipt.rows[0]).toEqual({tenant_id:demo.tenants.chino,subject_id:demo.users.owner});
+    }finally{
+      if(previousKeyId===undefined)delete process.env.COMMERCE_AGENT_SESSION_KEY_ID;else process.env.COMMERCE_AGENT_SESSION_KEY_ID=previousKeyId;
+      if(previousPrivateKey===undefined)delete process.env.COMMERCE_AGENT_SESSION_PRIVATE_KEY;else process.env.COMMERCE_AGENT_SESSION_PRIVATE_KEY=previousPrivateKey;
+    }
   });
 });

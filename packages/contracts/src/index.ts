@@ -212,6 +212,20 @@ export const agentRouteApprovalInput=z.object({
   confirmed:z.literal(true),
 }).strict();
 export const agentRouteRevocationInput=agentRouteApprovalInput;
+export const platformAgentRouteActivationInput=z.object({
+  tenantId:uuid,
+  version:z.number().int().min(0),
+  environment:z.enum(agentRouteEnvironments),
+  expiresAt:z.string().datetime({offset:true}),
+  reason:z.string().trim().min(10).max(500),
+  confirmed:z.literal(true),
+}).strict();
+export const platformAgentRouteRevocationInput=z.object({
+  tenantId:uuid,
+  version:z.number().int().positive(),
+  reason:z.string().trim().min(10).max(500),
+  confirmed:z.literal(true),
+}).strict();
 export type OptionAxis={name:string;values:string[]};
 export function buildCombinations(axes:OptionAxis[]):Record<string,string>[] {
   if(!axes.length||axes.length>3)throw new Error('กำหนดตัวเลือก 1–3 ประเภท');

@@ -12,6 +12,7 @@ try{
  for(const [id,email,name] of [[demo.users.owner,'owner@chino.demo','คุณเจ้าของร้าน'],[demo.users.other,'owner@goods.demo','เจ้าของ Everyday'],[demo.users.marketing,'marketing@chino.demo','ทีมการตลาด'],[demo.users.consultant,'advisor@commerce.demo','ที่ปรึกษาสององค์กร'],[demo.users.limited,'staff@chino.demo','ทีมร้าน TikTok']]){
   await c.query('INSERT INTO private.users(id,email,name,password_hash) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET email=excluded.email,name=excluded.name,password_hash=excluded.password_hash',[id,email,name,hashPassword(password)]);
  }
+ await c.query("INSERT INTO private.platform_operators(user_id,role,active) VALUES($1,'platform_owner',true) ON CONFLICT(user_id) DO UPDATE SET role='platform_owner',active=true",[demo.users.owner]);
  for(const [id,name] of [[demo.tenants.chino,'Chino Studio'],[demo.tenants.goods,'Everyday Goods']])await c.query('INSERT INTO app.tenants(id,name) VALUES($1,$2) ON CONFLICT DO NOTHING',[id,name]);
  for(const [tenant,user,role,all] of [[demo.tenants.chino,demo.users.owner,'owner',true],[demo.tenants.goods,demo.users.other,'owner',true],[demo.tenants.chino,demo.users.marketing,'marketing',true],[demo.tenants.chino,demo.users.consultant,'auditor',true],[demo.tenants.goods,demo.users.consultant,'auditor',true],[demo.tenants.chino,demo.users.limited,'operator',false]]){
   await c.query('INSERT INTO app.memberships(tenant_id,user_id,role,all_shops) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[tenant,user,role,all]);

@@ -7,6 +7,7 @@ const scopeSchema=z.object({
 }).strict();
 
 export type CommerceScope=z.infer<typeof scopeSchema>;
+export type CommerceDelegation={scope:CommerceScope;grantToken:string};
 
 /** Scope is accepted only from Eve's verified session principal, never a prompt or tool input. */
 export function requireCommerceScope(ctx:Pick<SessionContext,'session'>):CommerceScope{
@@ -19,4 +20,15 @@ export function requireCommerceScope(ctx:Pick<SessionContext,'session'>):Commerc
     throw new Error('The current caller does not own this Commerce session.');
   }
   return scopeSchema.parse({tenantId:initiator.attributes.tenantId,shopIds:initiator.attributes.shopIds});
+}
+
+/** Read tools require the fresh continuation grant for this exact turn. */
+export function requireCommerceDelegation(ctx:Pick<SessionContext,'session'>):CommerceDelegation{
+  const scope=requireCommerceScope(ctx),current=ctx.session.auth.current;
+  const token=current?.attributes.commerceGrant;
+  if(current?.principalType!=='user'||current.attributes.capability!=='continue'||
+    current.attributes.sessionId!==ctx.session.id||typeof token!=='string'||!token.startsWith('csg1_')){
+    throw new Error('A fresh Commerce continuation grant is required for read tools.');
+  }
+  return {scope,grantToken:token};
 }

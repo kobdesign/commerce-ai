@@ -1,6 +1,6 @@
 import { defineWorkflowTool } from 'eve/tools';
 import { z } from 'zod';
-import { requireCommerceScope } from '../lib/commerce-scope.ts';
+import { requireCommerceDelegation } from '../lib/commerce-scope.ts';
 import {
   inventoryAnalysisSchema,marketingAnalysisSchema,preparePromotionExecution,promotionPeriodSchema,promotionRecommendationSchema,
   verifyAndConsolidatePromotion,
@@ -12,7 +12,7 @@ export default defineWorkflowTool({
   outputSchema:promotionRecommendationSchema,
   async execute({question,period},ctx){
     'use workflow';
-    const scope=requireCommerceScope(ctx);
+    const {scope,grantToken}=requireCommerceDelegation(ctx);
     const execution=await preparePromotionExecution({sessionId:ctx.session.id,turnId:ctx.session.turn.id,callId:ctx.callId});
     const sharedTask=JSON.stringify({question,period,executionId:execution.id,
       requirements:['Use only your scoped read tools','Return no more than 10 items','Do not ask for tenant or shop identifiers']});
@@ -23,6 +23,6 @@ export default defineWorkflowTool({
     const [marketingResult,inventoryResult]=await Promise.all([marketingResponse.result(),inventoryResponse.result()]);
     if(marketingResult.status!=='completed'||marketingResult.data===undefined)throw new Error(`Marketing analysis did not complete: ${marketingResult.error?.message??marketingResult.status}`);
     if(inventoryResult.status!=='completed'||inventoryResult.data===undefined)throw new Error(`Inventory analysis did not complete: ${inventoryResult.error?.message??inventoryResult.status}`);
-    return verifyAndConsolidatePromotion({question,period,scope,marketing:marketingResult.data,inventory:inventoryResult.data,execution});
+    return verifyAndConsolidatePromotion({question,period,scope,grantToken,marketing:marketingResult.data,inventory:inventoryResult.data,execution});
   },
 });
