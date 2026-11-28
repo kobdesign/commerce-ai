@@ -15,6 +15,7 @@
 - ปิด AI และ revoke active grant/session ของ tenant นั้นทันที
 - บันทึก actor, เวลา, เหตุผล, environment และ policy version ใน durable audit
 - AI workspace และ conversation API อ่าน policy ปัจจุบันจากฐานข้อมูลทุกครั้ง
+- Eve read tools ใช้ short-lived signed continuation grant จึงไม่ต้องมี tenant ID, shop allowlist หรือ tenant credential ใน Vercel ดู [session-delegated reads](96-eve-session-delegated-read-auth.md)
 - บริษัทที่ไม่มี policy, policy หมดอายุ, ถูก revoke หรือ environment ไม่ตรงยัง fail closed
 - เมนูและ API ของ Platform Control Plane จำกัดด้วย `private.platform_operators`
 
@@ -49,9 +50,10 @@
 
 - TypeScript typecheck: ผ่าน
 - ESLint: ผ่าน
-- Unit/integration: **323/323 ผ่าน จาก 53 test files**
+- Unit/integration: **324/324 ผ่าน จาก 53 test files**
 - Production build: ผ่าน และมี route `/platform/ai`, `/api/platform/agent-routes`
 - Browser E2E บนฐานข้อมูลแยก: **1/1 ผ่าน**
+- Eve build บน Node.js 24: ผ่าน
 - Live model calls: 0
 - Production tenant enrollment: 0
 

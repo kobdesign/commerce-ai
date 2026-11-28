@@ -111,6 +111,37 @@ export async function storeAgentServiceRequestResult(input:AgentServiceResultInp
   if(!result.rows[0])throw new Error('AGENT_RESULT_EMPTY');
   return result.rows[0].payload;
 }
+export type AgentSessionReadAuthorizationInput={
+  tenantId:string;grantId:string;subject:string;claimShopIds:string[];role:Role;environment:'development'|'staging';
+  issuedAt:number;expiresAt:number;sessionId:string;shopIds:string[];requiredScope:'catalog:read'|'sales:read'|'inventory:read';
+  requestId:string;requestTimestamp:string;method:'POST';path:string;bodyHash:string;
+};
+export async function authorizeAgentSessionReadRequest(input:AgentSessionReadAuthorizationInput):Promise<AgentServiceAuthorization>{
+  const result=await pool().query<AgentServiceAuthorization>(`SELECT tenant_id AS "tenantId",principal_id AS "principalId",shop_ids AS "shopIds",scopes,
+    environment,audience,authenticated_at AS "authenticatedAt",expires_at AS "expiresAt",replayed
+    FROM app.authorize_agent_session_read_request($1,$2,$3,$4::uuid[],$5,$6,to_timestamp($7),to_timestamp($8),$9,$10::uuid[],$11,$12,$13,$14,$15,$16)`,[
+    input.tenantId,input.grantId,input.subject,input.claimShopIds,input.role,input.environment,input.issuedAt,input.expiresAt,input.sessionId,
+    input.shopIds,input.requiredScope,input.requestId,input.requestTimestamp,input.method,input.path,input.bodyHash,
+  ]);
+  if(!result.rows[0])throw new Error('AGENT_SESSION_READ_UNAVAILABLE');
+  return result.rows[0];
+}
+export type AgentSessionResultInput={tenantId:string;requestId:string;subjectId:string;operation:'products.query'|'sales.query'|'inventory.query';bodyHash:string};
+export async function readAgentSessionRequestResult(input:AgentSessionResultInput){
+  const result=await pool().query<{payload:unknown|null}>(
+    'SELECT app.read_agent_session_request_result($1,$2,$3,$4,$5) AS payload',
+    [input.tenantId,input.requestId,input.subjectId,input.operation,input.bodyHash],
+  );
+  return result.rows[0]?.payload??null;
+}
+export async function storeAgentSessionRequestResult(input:AgentSessionResultInput&{payload:unknown}){
+  const result=await pool().query<{payload:unknown}>(
+    'SELECT app.store_agent_session_request_result($1,$2,$3,$4,$5,$6::jsonb) AS payload',
+    [input.tenantId,input.requestId,input.subjectId,input.operation,input.bodyHash,JSON.stringify(input.payload)],
+  );
+  if(!result.rows[0])throw new Error('AGENT_RESULT_EMPTY');
+  return result.rows[0].payload;
+}
 type AgentReadBaseInput={tenantId:string;requestId:string;shopIds:string[];limit:number;offset:number};
 export type AgentProductReadInput=AgentReadBaseInput&{search:string;category?:string;status:'active'|'archived'|'all';variantIds?:string[]};
 export type AgentSalesReadInput=AgentReadBaseInput&{from:string;to:string;variantIds?:string[];granularity:'variant'|'variant_channel'|'variant_day';orderStates:Array<'open'|'completed'|'cancelled'>};

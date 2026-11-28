@@ -201,12 +201,12 @@ export async function preparePromotionExecution(input:{sessionId:string;turnId:s
 }
 
 export async function verifyAndConsolidatePromotion(input:{question:string;period:z.infer<typeof promotionPeriodSchema>;scope:CommerceScope;
-  marketing:MarketingAnalysis;inventory:InventoryAnalysis;execution:PromotionExecutionIdentity}){
+  grantToken:string;marketing:MarketingAnalysis;inventory:InventoryAnalysis;execution:PromotionExecutionIdentity}){
   'use step';
   const variantIds=[...new Set([...input.marketing.candidates.map(item=>item.variantId),...input.inventory.assessments.map(item=>item.variantId)])].slice(0,20);
   if(variantIds.length===0)throw new Error('Specialists returned no evidence-backed candidate variants.');
   const {commerceClientForScope}=await import('./commerce-client.ts');
-  const client=await commerceClientForScope(input.scope);const asOf=input.execution.snapshotAt;
+  const client=await commerceClientForScope(input.scope,input.grantToken);const asOf=input.execution.snapshotAt;
   const common={shopIds:input.scope.shopIds,variantIds,cursor:null,limit:variantIds.length,asOf};
   const [products,sales,inventory]=await Promise.all([
     client.products({...common,search:'',status:'active'},{idempotencyKey:input.execution.key}),
